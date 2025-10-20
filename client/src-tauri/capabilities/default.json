@@ -8,8 +8,16 @@
     "opener:default",
     {
       "identifier": "http:default",
-      "allow": [{ "url": "**" }]
+      "allow": [
+        {
+          "url": "**"
+        }
+      ]
     },
-    "websocket:default"
+    "websocket:default",
+    "store:default",
+    "dialog:default",
+    "core:window:default",
+    "core:window:allow-start-dragging"
   ]
 }
