@@ -19,7 +19,8 @@
         "windowEffects": {
           "effects": ["mica", "contentBackground"]
         },
-        "transparent": true
+        "transparent": true,
+        "visible": false
       }
     ],
     "security": {

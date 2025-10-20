@@ -2,7 +2,9 @@
 @import "tw-animate-css";
 
 @plugin "daisyui" {
-  prefix: dui;
+  prefix: dui-;
+  /* corporate is light */
+  themes: corporate, dark;
 }
 
 :root,
@@ -129,4 +131,9 @@
   body {
     @apply bg-transparent text-foreground;
   }
+}
+
+html[no-transparent] head,
+html[no-transparent] body {
+  @apply !bg-base-100;
 }
