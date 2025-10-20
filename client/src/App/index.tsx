@@ -42,11 +42,3 @@ export default function App() {
     {pageContent}
   </ThemeContext>
 }
-
-
-// look at discord
-// whats going on rn
-// Navigation
-// you are making me feel like an amature
-// Nah
-// Its how i develop
