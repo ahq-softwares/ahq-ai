@@ -1,0 +1,3 @@
+*:not(div) {
+  @apply transition-all;
+}

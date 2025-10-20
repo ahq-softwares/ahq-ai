@@ -4,6 +4,7 @@ import Splash from "./Splash";
 
 import { ThemeContext } from "./theme";
 import { initStore } from "./store";
+import Application from "./App";
 
 export const PageId = {
   Splash: 0,
@@ -34,7 +35,7 @@ export default function App() {
       case PageId.Splash:
         return <Splash />;
       default:
-        return <>Not Found</>;
+        return <Application />;
     }
   }, [page]);
 
