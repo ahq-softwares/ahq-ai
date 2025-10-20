@@ -35,7 +35,7 @@
       "icons/icon.ico"
     ],
     "windows": {
-      "allowDowngrades": true,
+      "allowDowngrades": false,
       "certificateThumbprint": null,
       "digestAlgorithm": null,
       "nsis": null,
@@ -46,7 +46,7 @@
         "silent": true,
         "type": "downloadBootstrapper"
       },
-      "wix": null
+      "wix": {}
     },
     "copyright": "AHQ Softwares",
     "category": "Productivity",
