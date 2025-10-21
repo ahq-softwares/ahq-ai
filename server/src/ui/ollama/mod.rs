@@ -24,9 +24,7 @@ pub fn ollama_page(s: Ptr<Config>) -> NamedView<ScrollView<LinearLayout>> {
     LinearLayout::horizontal()
       .child(TextView::new("⊠ Vision enabled Models").full_width())
       .child(Button::new_raw("Manage ↗", move |x| {
-        x.add_layer(
-          model::bind(s1.clone(), true)
-        );
+        x.add_layer(model::bind(s1.clone(), true));
       })),
   );
 
@@ -34,9 +32,7 @@ pub fn ollama_page(s: Ptr<Config>) -> NamedView<ScrollView<LinearLayout>> {
     LinearLayout::horizontal()
       .child(TextView::new("⊟ Text only models").full_width())
       .child(Button::new_raw("Manage ↗", move |x| {
-        x.add_layer(
-          model::bind(s2.clone(), false)
-        );
+        x.add_layer(model::bind(s2.clone(), false));
       })),
   );
 

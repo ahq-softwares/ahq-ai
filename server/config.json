@@ -12,6 +12,6 @@
     "txtmodels": []
   },
   "authentication": {
-    "kind": "OpenToAll"
+    "kind": "TokenBased"
   }
 }

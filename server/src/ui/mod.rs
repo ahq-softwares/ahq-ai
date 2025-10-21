@@ -17,10 +17,13 @@ use cursive_tabs::TabPanel;
 use serde_json::to_string_pretty;
 use tokio::runtime::{Builder, Runtime};
 
-use crate::structs::Config;
+use crate::structs::{Authentication, Config};
 
+mod auth;
 mod bind;
 mod ollama;
+
+pub(crate) mod lazy;
 
 pub static ASYNC: LazyLock<Runtime> = LazyLock::new(|| {
   Builder::new_current_thread()
@@ -69,6 +72,65 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
   l.add_child(TextView::new("General Settings").style(Style::merge(&[Effect::Underline.into()])));
 
   l.add_child(binds(c_.clone()));
+
+  l.add_child(
+    LinearLayout::horizontal()
+      .child(TextView::new("⚒ Authentication Type").full_width())
+      .child(
+        Button::new_raw(
+          format!(
+            "{} ↗",
+            match c_.authentication {
+              Authentication::OpenToAll => "No Auth",
+              Authentication::TokenBased => "Token",
+              Authentication::AccountAuthentication { .. } => "Accounts",
+            }
+          ),
+          move |x| {
+            x.add_layer(
+              Dialog::around(
+                SelectView::new()
+                  .item("No Auth (OpenToAll)", 0u8)
+                  .item("Token (TokenBased)", 1u8)
+                  .item("Accounts (AccountAuthentication)", 2u8)
+                  .on_submit(|x, bit| {
+                    let c_: &mut Ptr<Config> = x.user_data().unwrap();
+
+                    c_.authentication = match bit {
+                      0 => Authentication::OpenToAll,
+                      1 => Authentication::TokenBased,
+                      2 => Authentication::AccountAuthentication {
+                        registration_allowed: true,
+                        max_users: None,
+                      },
+                      _ => unreachable!(),
+                    };
+
+                    let label = format!(
+                      "{} ↗",
+                      match c_.authentication {
+                        Authentication::OpenToAll => "No Auth",
+                        Authentication::TokenBased => "Token",
+                        Authentication::AccountAuthentication { .. } => "Accounts",
+                      }
+                    );
+
+                    x.call_on_name("auth_type", move |x: &mut Button| {
+                      x.set_label_raw(label);
+                    });
+
+                    x.pop_layer();
+                  })
+                  .with_name("themeselect"),
+              )
+              .title("Authentication Type")
+              .dismiss_button("Cancel"),
+            );
+          },
+        )
+        .with_name("auth_type"),
+      ),
+  );
 
   l.add_child(
     LinearLayout::horizontal()
@@ -151,11 +213,7 @@ pub fn ui() {
 
   tabs.add_tab(ollama::ollama_page(c_.clone()));
 
-  tabs.add_tab(
-    ScrollView::new(LinearLayout::vertical())
-      .show_scrollbars(true)
-      .with_name("⚒ Authentication"),
-  );
+  tabs.add_tab(auth::auth_page(&siv));
 
   tabs.add_tab(
     ScrollView::new(

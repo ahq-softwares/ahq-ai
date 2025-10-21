@@ -73,7 +73,7 @@ fn gen_cnt(s: Ptr<Config>, cv: bool) -> NamedView<LinearLayout> {
     } else {
       &s.ollama.txtmodels
     },
-    cv
+    cv,
   );
 
   layout.with_name("models")

@@ -31,13 +31,10 @@ pub struct OllamaConfiguration {
 pub enum Authentication {
   OpenToAll,
   TokenBased,
-  AccountAuthentication { config: AuthConfig },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct AuthConfig {
-  pub registration_allowed: bool,
-  pub max_users: Option<u16>,
+  AccountAuthentication {
+    registration_allowed: bool,
+    max_users: Option<u16>,
+  },
 }
 
 impl Config {
