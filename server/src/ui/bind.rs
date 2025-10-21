@@ -1,5 +1,6 @@
 use cursive::{
   align::Align,
+  theme::{Effect, Style},
   view::{Nameable, Resizable},
   views::{Button, Dialog, EditView, LinearLayout, NamedView, ResizedView, ScrollView, TextView},
 };
@@ -88,10 +89,26 @@ fn iterate_layout(l: &mut LinearLayout, binds: &[(String, u16)]) {
   } else {
     l.add_child(
       LinearLayout::horizontal()
-        .child(TextView::new("SNo").fixed_width(5))
-        .child(TextView::new("Hostname").full_width())
-        .child(TextView::new("Port ").fixed_width(5))
-        .child(TextView::new("").fixed_width(12)),
+        .child(
+          TextView::new("SNo")
+            .style(Style::merge(&[Effect::Dim.into()]))
+            .fixed_width(5),
+        )
+        .child(
+          TextView::new("Hostname")
+            .style(Style::merge(&[Effect::Dim.into()]))
+            .full_width(),
+        )
+        .child(
+          TextView::new("Port ")
+            .style(Style::merge(&[Effect::Dim.into()]))
+            .fixed_width(5),
+        )
+        .child(
+          TextView::new("")
+            .style(Style::merge(&[Effect::Dim.into()]))
+            .fixed_width(12),
+        ),
     );
   }
 

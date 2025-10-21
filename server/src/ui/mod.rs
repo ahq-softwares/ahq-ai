@@ -7,8 +7,10 @@ use std::{
 
 use cursive::{
   Cursive, CursiveExt,
+  align::Align,
+  theme::{Effect, PaletteColor, Style},
   view::{Nameable, Resizable},
-  views::{Button, Dialog, LinearLayout, ScrollView, TextView},
+  views::{Button, Dialog, DummyView, LinearLayout, ScrollView, TextView},
 };
 use cursive_tabs::TabPanel;
 use serde_json::to_string_pretty;
@@ -16,8 +18,8 @@ use tokio::runtime::{Builder, Runtime};
 
 use crate::structs::Config;
 
-mod auth;
 mod bind;
+mod ollama;
 
 pub static ASYNC: LazyLock<Runtime> = LazyLock::new(|| {
   Builder::new_current_thread()
@@ -25,6 +27,38 @@ pub static ASYNC: LazyLock<Runtime> = LazyLock::new(|| {
     .build()
     .expect("Unable to build async runtime")
 });
+
+fn general(l: &mut LinearLayout) {
+  l.add_child(
+    TextView::new("Welcome to Server Configuration")
+      .align(Align::center())
+      .style(Style::merge(&[PaletteColor::Highlight.into()]))
+      .fixed_height(3),
+  );
+
+  l.add_child(
+    TextView::new(format!("AHQ AI Server v{}", env!("CARGO_PKG_VERSION")))
+      .align(Align::top_right())
+      .style(Style::merge(&[Effect::Dim.into()]))
+      .fixed_height(2),
+  );
+
+  l.add_child(TextView::new("Quick Guide").style(Style::merge(&[Effect::Underline.into()])));
+
+  l.add_child(TextView::new("» Use ← ↑ → ↓ to navigate"));
+
+  l.add_child(TextView::new(
+    "» Press <Enter> key to interact with buttons",
+  ));
+
+  l.add_child(TextView::new(
+    "» <q> key, <Ctrl+C> or going to <Save> tab updates the config file",
+  ));
+
+  l.add_child(DummyView::new().fixed_height(1).full_width());
+
+  l.add_child(TextView::new("General Settings").style(Style::merge(&[Effect::Underline.into()])));
+}
 
 pub fn ui() {
   let mut config = ASYNC.block_on(async { Config::new_or_default().await });
@@ -40,17 +74,18 @@ pub fn ui() {
 
   let mut tabs = TabPanel::new();
 
+  let mut gene = LinearLayout::vertical();
+
+  general(&mut gene);
+  gene.add_child(binds(c_.clone()));
+
   tabs.add_tab(
-    ScrollView::new(LinearLayout::vertical().child(binds(c_.clone())))
+    ScrollView::new(gene)
       .show_scrollbars(true)
       .with_name("☸ General"),
   );
 
-  tabs.add_tab(
-    ScrollView::new(LinearLayout::vertical())
-      .show_scrollbars(true)
-      .with_name("🖧 Ollama"),
-  );
+  tabs.add_tab(ollama::ollama_page());
 
   tabs.add_tab(
     ScrollView::new(LinearLayout::vertical())
