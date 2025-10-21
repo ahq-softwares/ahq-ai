@@ -1,4 +1,5 @@
 use std::{
+  env::home_dir,
   fs,
   ops::{Deref, DerefMut},
   sync::LazyLock,
@@ -8,9 +9,9 @@ use std::{
 use cursive::{
   Cursive, CursiveExt,
   align::Align,
-  theme::{Effect, PaletteColor, Style},
+  theme::{Effect, PaletteColor, Style, Theme},
   view::{Nameable, Resizable},
-  views::{Button, Dialog, DummyView, LinearLayout, ScrollView, TextView},
+  views::{Button, Dialog, DummyView, LinearLayout, ScrollView, SelectView, TextView},
 };
 use cursive_tabs::TabPanel;
 use serde_json::to_string_pretty;
@@ -28,9 +29,9 @@ pub static ASYNC: LazyLock<Runtime> = LazyLock::new(|| {
     .expect("Unable to build async runtime")
 });
 
-fn general(l: &mut LinearLayout) {
+fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
   l.add_child(
-    TextView::new("Welcome to Server Configuration")
+    TextView::new("Welcome to AHQ-AI Server Configuration")
       .align(Align::center())
       .style(Style::merge(&[PaletteColor::Highlight.into()]))
       .fixed_height(3),
@@ -56,12 +57,54 @@ fn general(l: &mut LinearLayout) {
   ));
 
   l.add_child(TextView::new(
+    "» You can also scroll with the mouse scrollbar",
+  ));
+
+  l.add_child(TextView::new(
     "» <q> key, <Ctrl+C> or going to <Save> tab updates the config file",
   ));
 
   l.add_child(DummyView::new().fixed_height(1).full_width());
 
   l.add_child(TextView::new("General Settings").style(Style::merge(&[Effect::Underline.into()])));
+
+  l.add_child(binds(c_.clone()));
+
+  l.add_child(
+    LinearLayout::horizontal()
+      .child(TextView::new("🖌 TUI Theme").full_width())
+      .child(Button::new_raw("Select ↗", move |x| {
+        x.add_layer(
+          Dialog::around(
+            SelectView::new()
+              .item("Default Theme", 0u8)
+              .item("Monochrome Theme", 1u8)
+              .on_submit(|x, bit| {
+                x.set_theme(match bit {
+                  0 => Theme::retro(),
+                  1 => Theme::terminal_default(),
+                  _ => unreachable!(),
+                });
+
+                x.call_on_name("themeselect", |x: &mut SelectView| {
+                  x.set_selection(*bit as usize)
+                });
+
+                x.pop_layer();
+
+                if let Some(mut home) = home_dir() {
+                  home.push(".ahqaiservertheme");
+
+                  _ = fs::write(&home, vec![*bit])
+                }
+              })
+              .with_name("themeselect"),
+          )
+          .title("Select Theme")
+          .dismiss_button("Cancel"),
+        );
+      })),
+  );
 }
 
 pub fn ui() {
@@ -73,6 +116,24 @@ pub fn ui() {
 
   let c_ = Ptr(&mut config);
 
+  let prompt = config.binds.is_empty();
+
+  siv.set_theme(Theme::retro());
+
+  if let Some(mut home) = home_dir() {
+    home.push(".ahqaiservertheme");
+
+    if let Ok(x) = fs::read(&home) {
+      let first_bit = &x[0];
+
+      match *first_bit {
+        0 => {}
+        1 => siv.set_theme(Theme::terminal_default()),
+        _ => {}
+      }
+    }
+  }
+
   siv.set_user_data(c_.clone());
   siv.set_global_callback('q', |x| x.quit());
 
@@ -80,16 +141,15 @@ pub fn ui() {
 
   let mut gene = LinearLayout::vertical();
 
-  general(&mut gene);
-  gene.add_child(binds(c_.clone()));
+  general(&mut gene, c_.clone());
 
   tabs.add_tab(
     ScrollView::new(gene)
       .show_scrollbars(true)
-      .with_name("☸ General"),
+      .with_name("䷸ General"),
   );
 
-  tabs.add_tab(ollama::ollama_page());
+  tabs.add_tab(ollama::ollama_page(c_.clone()));
 
   tabs.add_tab(
     ScrollView::new(LinearLayout::vertical())
@@ -150,13 +210,24 @@ pub fn ui() {
     .with_name("🖫 Save"),
   );
 
-  _ = tabs.set_active_tab("☸ General");
+  _ = tabs.set_active_tab("䷸ General");
 
   siv.add_layer(
     Dialog::around(tabs.with_name("tabs"))
       .title("AHQ-AI Server Configuration Utility")
       .full_screen(),
   );
+
+  if prompt {
+    siv.add_layer(
+      Dialog::around(TextView::new(
+        "Please set up hostnames and ports under `☸ General`!",
+      ))
+      .title("Important")
+      .dismiss_button("Ok"),
+    );
+  }
+
   siv.run();
 
   ASYNC.block_on(async move {

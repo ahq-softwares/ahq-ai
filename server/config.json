@@ -1,18 +1,16 @@
 {
   "binds": [
     [
-      "127.0.0.1",
-      65535
-    ],
-    [
       "0.0.0.0",
-      3000
+      3124
     ]
   ],
   "ollama": {
-    "host": "",
-    "port": 0,
-    "cvmodels": [],
+    "host": "127.0.0.1",
+    "port": 3000,
+    "cvmodels": [
+      "gemma:7b"
+    ],
     "txtmodels": []
   },
   "authentication": {
