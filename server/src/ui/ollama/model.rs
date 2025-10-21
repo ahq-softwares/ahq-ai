@@ -121,7 +121,11 @@ fn layout_child(index: usize, model: &str, cv: bool) -> LinearLayout {
     .child(
       Button::new_raw("✕ Remove", move |x| {
         x.with_user_data(|x: &mut Ptr<Config>| {
-          x.binds.remove(index);
+          if cv {
+            x.ollama.cvmodels.remove(index);
+          } else {
+            x.ollama.txtmodels.remove(index);
+          }
         });
 
         let state: &mut Ptr<Config> = x.user_data().unwrap();
