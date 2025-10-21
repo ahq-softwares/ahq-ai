@@ -1,7 +1,8 @@
-use std::{ops::{Deref, DerefMut}, sync::LazyLock};
+use std::{fs, ops::{Deref, DerefMut}, sync::LazyLock, time::{SystemTime, UNIX_EPOCH}};
 
-use cursive::{Cursive, CursiveExt, With, view::{Nameable, Resizable}, views::{Button, Dialog, EditView, LinearLayout, ScrollView, TextArea, TextView}};
-use cursive_tabs::{TabPanel, TabView};
+use cursive::{Cursive, CursiveExt, view::{Nameable, Resizable}, views::{Button, Dialog, EditView, LinearLayout, ScrollView, TextView}};
+use cursive_tabs::TabPanel;
+use serde_json::to_string_pretty;
 use tokio::runtime::{Builder, Runtime};
 
 use crate::structs::Config;
@@ -15,6 +16,8 @@ pub static ASYNC: LazyLock<Runtime> = LazyLock::new(|| {
 
 pub fn ui() {
   let mut config = ASYNC.block_on(async { Config::new_or_default().await });
+
+  let initial_config = config.clone();
 
   let mut siv = Cursive::new();
 
@@ -38,9 +41,27 @@ pub fn ui() {
 
   tabs.add_tab(
     ScrollView::new(
-      Button::new("Save Changes and Exit", |x| {
-        x.quit();
-      })
+      LinearLayout::vertical()
+        .child(
+          Button::new_raw("Save Changes and Exit", |x| {
+            x.quit();
+          })
+        )
+        .child(
+          Button::new_raw("Backup Initial Config", move |x| {
+            let file = format!("./config.bak.{}.json", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs());
+            fs::write(&file, to_string_pretty(&initial_config).unwrap()).unwrap();
+
+            x.add_layer(
+              Dialog::new()
+                .title("Successful")
+                .content(
+                  TextView::new(format!("Successfully backed up initial config at {file}"))
+                )
+                .dismiss_button("Ok")
+            );
+          })
+        )
     )
       .show_scrollbars(true)
       .with_name("Exit")
