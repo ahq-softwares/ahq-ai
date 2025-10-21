@@ -69,7 +69,7 @@ pub fn ui() {
   
   _ = tabs.set_active_tab("Hosting");
   
-  siv.add_layer(Dialog::around(tabs).full_screen());
+  siv.add_layer(Dialog::around(tabs.with_name("tabs")).full_screen());
 
   siv.run();
 
