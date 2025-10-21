@@ -113,17 +113,19 @@ fn layout_child(index: usize, host: &str, port: &u16) -> LinearLayout {
         .align(Align::center())
         .fixed_width(5),
     )
-    .child(Button::new_raw("✕ Remove", move |x| {
-      x.with_user_data(|x: &mut Ptr<Config>| {
-        x.binds.remove(index);
-      });
+    .child(
+      Button::new_raw("✕ Remove", move |x| {
+        x.with_user_data(|x: &mut Ptr<Config>| {
+          x.binds.remove(index);
+        });
 
-      let state: &mut Ptr<Config> = x.user_data().unwrap();
-      let state = state.binds.clone();
+        let state: &mut Ptr<Config> = x.user_data().unwrap();
+        let state = state.binds.clone();
 
-      x.call_on_name("bindings", |l: &mut LinearLayout| {
-        iterate_layout(l, &state);
-      });
-    })
-    .fixed_width(12))
+        x.call_on_name("bindings", |l: &mut LinearLayout| {
+          iterate_layout(l, &state);
+        });
+      })
+      .fixed_width(12),
+    )
 }
