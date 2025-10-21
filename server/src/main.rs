@@ -17,7 +17,7 @@ fn main() {
 
   let mut args = args();
   _ = args.next();
-  
+
   let mut config_ui = false;
 
   args.into_iter().for_each(|x| {

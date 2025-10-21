@@ -15,7 +15,7 @@ pub struct Config {
 }
 
 fn def_bind() -> Vec<(String, u16)> {
-  vec![]
+  vec![("0.0.0.0".to_string(), 3000)]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -23,7 +23,7 @@ pub struct OllamaConfiguration {
   pub host: String,
   pub port: u16,
   pub cvmodels: Vec<String>,
-  pub txtmodels: Vec<String>
+  pub txtmodels: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

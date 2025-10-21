@@ -1,6 +1,15 @@
-use std::{fs, ops::{Deref, DerefMut}, sync::LazyLock, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+  fs,
+  ops::{Deref, DerefMut},
+  sync::LazyLock,
+  time::{SystemTime, UNIX_EPOCH},
+};
 
-use cursive::{Cursive, CursiveExt, view::{Nameable, Resizable}, views::{Button, Dialog, EditView, LinearLayout, ScrollView, TextView}};
+use cursive::{
+  Cursive, CursiveExt,
+  view::{Nameable, Resizable},
+  views::{Button, Dialog, LinearLayout, ScrollView, TextView},
+};
 use cursive_tabs::TabPanel;
 use serde_json::to_string_pretty;
 use tokio::runtime::{Builder, Runtime};
@@ -8,6 +17,7 @@ use tokio::runtime::{Builder, Runtime};
 use crate::structs::Config;
 
 mod auth;
+mod bind;
 
 pub static ASYNC: LazyLock<Runtime> = LazyLock::new(|| {
   Builder::new_current_thread()
@@ -31,89 +41,95 @@ pub fn ui() {
   let mut tabs = TabPanel::new();
 
   tabs.add_tab(
-    ScrollView::new(
-        LinearLayout::vertical()
-          .child(binds(c_.clone()))
-      )
+    ScrollView::new(LinearLayout::vertical().child(binds(c_.clone())))
       .show_scrollbars(true)
-      .with_name("☸ General")
+      .with_name("☸ General"),
   );
 
   tabs.add_tab(
-    ScrollView::new(
-      LinearLayout::vertical()      
-    )
+    ScrollView::new(LinearLayout::vertical())
       .show_scrollbars(true)
-      .with_name("🖧 Ollama")
+      .with_name("🖧 Ollama"),
   );
 
-    tabs.add_tab(
-    ScrollView::new(
-      LinearLayout::vertical()      
-    )
+  tabs.add_tab(
+    ScrollView::new(LinearLayout::vertical())
       .show_scrollbars(true)
-      .with_name("⚒ Authentication")
+      .with_name("⚒ Authentication"),
   );
 
   tabs.add_tab(
     ScrollView::new(
       LinearLayout::vertical()
-        .child(
-          Button::new_raw("🖴 Save Changes and Exit", |x| {
-            x.quit();
-          })
-        )
-                .child(
-          Button::new_raw("🖪 Backup current Config", move |x| {
-            let con: &mut Ptr<Config> = x.user_data().unwrap();
+        .child(Button::new_raw("🖴 Save Changes and Exit", |x| {
+          x.quit();
+        }))
+        .child(Button::new_raw("🖪 Backup current Config", move |x| {
+          let con: &mut Ptr<Config> = x.user_data().unwrap();
 
-            let con = unsafe { &*con.0 };
+          let con = unsafe { &*con.0 };
 
-            let file = format!("./config.bak.{}.json", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs());
-            fs::write(&file, to_string_pretty(con).unwrap()).unwrap();
+          let file = format!(
+            "./config.bak.{}.json",
+            SystemTime::now()
+              .duration_since(UNIX_EPOCH)
+              .unwrap()
+              .as_secs()
+          );
+          fs::write(&file, to_string_pretty(con).unwrap()).unwrap();
 
-            x.add_layer(
-              Dialog::new()
-                .title("Successful")
-                .content(
-                  TextView::new(format!("Successfully backed up initial config at {file}"))
-                )
-                .dismiss_button("Ok")
-            );
-          })
-        )
-        .child(
-          Button::new_raw("🖪 Backup Initial Config", move |x| {
-            let file = format!("./config.bak.{}.json", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs());
-            fs::write(&file, to_string_pretty(&initial_config).unwrap()).unwrap();
+          x.add_layer(
+            Dialog::new()
+              .title("Successful")
+              .content(TextView::new(format!(
+                "Successfully backed up initial config at {file}"
+              )))
+              .dismiss_button("Ok"),
+          );
+        }))
+        .child(Button::new_raw("🖪 Backup Initial Config", move |x| {
+          let file = format!(
+            "./config.bak.{}.json",
+            SystemTime::now()
+              .duration_since(UNIX_EPOCH)
+              .unwrap()
+              .as_secs()
+          );
+          fs::write(&file, to_string_pretty(&initial_config).unwrap()).unwrap();
 
-            x.add_layer(
-              Dialog::new()
-                .title("Successful")
-                .content(
-                  TextView::new(format!("Successfully backed up initial config at {file}"))
-                )
-                .dismiss_button("Ok")
-            );
-          })
-        )
+          x.add_layer(
+            Dialog::new()
+              .title("Successful")
+              .content(TextView::new(format!(
+                "Successfully backed up initial config at {file}"
+              )))
+              .dismiss_button("Ok"),
+          );
+        })),
     )
-      .show_scrollbars(true)
-      .with_name("🖫 Save")
+    .show_scrollbars(true)
+    .with_name("🖫 Save"),
   );
-  
+
   _ = tabs.set_active_tab("☸ General");
-  
-  siv.add_layer(Dialog::around(tabs.with_name("tabs")).title("AHQ-AI Server Configuration Utility").full_screen());
+
+  siv.add_layer(
+    Dialog::around(tabs.with_name("tabs"))
+      .title("AHQ-AI Server Configuration Utility")
+      .full_screen(),
+  );
   siv.run();
 
   ASYNC.block_on(async move {
-    config.save_config().await.expect("Unable to save edited config");
+    config
+      .save_config()
+      .await
+      .expect("Unable to save edited config");
   });
 }
 
 #[derive(Debug, Clone, Copy)]
-struct Ptr<T>(*mut T);
+pub struct Ptr<T>(*mut T);
 
 unsafe impl<T> Send for Ptr<T> {}
 unsafe impl<T> Sync for Ptr<T> {}
@@ -135,100 +151,10 @@ impl<T> DerefMut for Ptr<T> {
 fn binds(s: Ptr<Config>) -> LinearLayout {
   LinearLayout::horizontal()
     .child(TextView::new("🖳 Hostnames and Ports").full_width())
-    .child(Button::new_raw(
-      "View ↗",
-      |x| {
-        // x.add_layer(
-        //   Dialog::new()
-        //     .title("Enter Hostname")
-        //     .content(
-        //       EditView::new()
-        //         .on_submit(|x, _| {
-        //           x.pop_layer();
-        //         })
-        //         .on_edit(move |c, txt, _| {
-        //           c.with_user_data(|s: &mut Ptr<Config>| {
-        //             s.host = txt.to_string();
-        //           });
-
-        //           c.call_on_name("host", |c: &mut Button| {
-        //             c.set_label_raw(format!("[{}]", txt),);
-        //           });
-        //         }) 
-        //     )
-        //     .button("Done", |x| { x.pop_layer(); })
-        // );
-      }
-    )
-      .with_name("host")
+    .child(
+      Button::new_raw("View ↗", move |x| {
+        x.add_layer(bind::bind(s.clone()));
+      })
+      .with_name("host"),
     )
 }
-
-
-// fn port(s: Ptr<Config>) -> LinearLayout {
-//   LinearLayout::horizontal()
-//     .child(TextView::new("Port (0-65535)").full_width())
-//     .child(Button::new_raw(
-//       format!("<{}>", s.port),
-//       |x| {
-//         x.add_layer(
-//           Dialog::new()
-//             .title("Enter port")
-//             .content(
-//               EditView::new()
-//                 .max_content_width(5)
-//                 .on_submit(|x, _| {
-//                   x.pop_layer();
-//                 })
-//                 .on_edit(move |c, txt, _| {
-//                   if let Ok(x) = txt.parse::<u16>() {
-//                     c.with_user_data(|s: &mut Ptr<Config>| {
-//                       s.port = x;
-//                     });
-
-//                     c.call_on_name("port", |c: &mut Button| {
-//                       c.set_label(x.to_string());
-//                     });
-//                   }
-//                 }) 
-//             )
-//             .button("Done", |x| { x.pop_layer(); })
-//         );
-//       }
-//     )
-//       .with_name("port")
-//       .max_width(7)
-//     )
-// }
-
-// fn hostname(s: Ptr<Config>) -> LinearLayout {
-//   LinearLayout::horizontal()
-//     .child(TextView::new("Enter the hostname to use").full_width())
-//     .child(Button::new_raw(
-//       format!("[{}]", s.host),
-//       |x| {
-//         x.add_layer(
-//           Dialog::new()
-//             .title("Enter Hostname")
-//             .content(
-//               EditView::new()
-//                 .on_submit(|x, _| {
-//                   x.pop_layer();
-//                 })
-//                 .on_edit(move |c, txt, _| {
-//                   c.with_user_data(|s: &mut Ptr<Config>| {
-//                     s.host = txt.to_string();
-//                   });
-
-//                   c.call_on_name("host", |c: &mut Button| {
-//                     c.set_label_raw(format!("[{}]", txt),);
-//                   });
-//                 }) 
-//             )
-//             .button("Done", |x| { x.pop_layer(); })
-//         );
-//       }
-//     )
-//       .with_name("host")
-//     )
-// }
