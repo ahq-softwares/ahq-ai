@@ -29,6 +29,7 @@ pub fn ui() {
   tabs.add_tab(
     ScrollView::new(
         LinearLayout::vertical()
+          .child(hostname(c_.clone()))
           .child(port(c_.clone()))
       )
       .show_scrollbars(true)
@@ -80,7 +81,7 @@ fn port(s: Ptr<Config>) -> LinearLayout {
   LinearLayout::horizontal()
     .child(TextView::new("Port (0-65535)").full_width())
     .child(Button::new_raw(
-      s.port.to_string(),
+      format!("<{}>", s.port),
       |x| {
         x.add_layer(
           Dialog::new()
@@ -94,8 +95,8 @@ fn port(s: Ptr<Config>) -> LinearLayout {
                       s.port = x;
                     });
 
-                    c.call_on_name("btn", |c: &mut Button| {
-                      c.set_label_raw(x.to_string());
+                    c.call_on_name("port", |c: &mut Button| {
+                      c.set_label(x.to_string());
                     });
                   }
                 }) 
@@ -104,16 +105,36 @@ fn port(s: Ptr<Config>) -> LinearLayout {
         );
       }
     )
-      .with_name("btn")
-      .fixed_width(5)
+      .with_name("port")
+      .max_width(7)
     )
 }
 
+fn hostname(s: Ptr<Config>) -> LinearLayout {
+  LinearLayout::horizontal()
+    .child(TextView::new("Enter the hostname to use").full_width())
+    .child(Button::new_raw(
+      format!("[{}]", s.host),
+      |x| {
+        x.add_layer(
+          Dialog::new()
+            .title("Enter Hostname")
+            .content(
+              EditView::new()
+                .on_edit(move |c, txt, _| {
+                  c.with_user_data(|s: &mut Ptr<Config>| {
+                    s.host = txt.to_string();
+                  });
 
-// THAT LOOKS CURSED
-// this framework is like react
-// i cannot edit
-// use down arrow key to s
-// the terminal is read only
-// fixed
-// check dsc
+                  c.call_on_name("host", |c: &mut Button| {
+                    c.set_label_raw(format!("[{}]", txt),);
+                  });
+                }) 
+            )
+            .button("Done", |x| { x.pop_layer(); })
+        );
+      }
+    )
+      .with_name("host")
+    )
+}
