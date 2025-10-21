@@ -110,6 +110,9 @@ fn port(s: Ptr<Config>) -> LinearLayout {
             .content(
               EditView::new()
                 .max_content_width(5)
+                .on_submit(|x, _| {
+                  x.pop_layer();
+                })
                 .on_edit(move |c, txt, _| {
                   if let Ok(x) = txt.parse::<u16>() {
                     c.with_user_data(|s: &mut Ptr<Config>| {
@@ -142,6 +145,9 @@ fn hostname(s: Ptr<Config>) -> LinearLayout {
             .title("Enter Hostname")
             .content(
               EditView::new()
+                .on_submit(|x, _| {
+                  x.pop_layer();
+                })
                 .on_edit(move |c, txt, _| {
                   c.with_user_data(|s: &mut Ptr<Config>| {
                     s.host = txt.to_string();
