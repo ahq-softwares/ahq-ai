@@ -52,6 +52,10 @@ fn general(l: &mut LinearLayout) {
   ));
 
   l.add_child(TextView::new(
+    "» You can also use mouse to interact with buttons or tabs",
+  ));
+
+  l.add_child(TextView::new(
     "» <q> key, <Ctrl+C> or going to <Save> tab updates the config file",
   ));
 
