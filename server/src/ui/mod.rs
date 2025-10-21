@@ -7,6 +7,8 @@ use tokio::runtime::{Builder, Runtime};
 
 use crate::structs::Config;
 
+mod auth;
+
 pub static ASYNC: LazyLock<Runtime> = LazyLock::new(|| {
   Builder::new_current_thread()
     .enable_all()
@@ -23,7 +25,6 @@ pub fn ui() {
 
   let c_ = Ptr(&mut config);
 
-  siv.set_window_title("AHQ AI Server Configuration");
   siv.set_user_data(c_.clone());
   siv.set_global_callback('q', |x| x.quit());
 
@@ -32,23 +33,57 @@ pub fn ui() {
   tabs.add_tab(
     ScrollView::new(
         LinearLayout::vertical()
-          .child(hostname(c_.clone()))
-          .child(port(c_.clone()))
+          .child(binds(c_.clone()))
       )
       .show_scrollbars(true)
-      .with_name("Hosting")
+      .with_name("☸ General")
+  );
+
+  tabs.add_tab(
+    ScrollView::new(
+      LinearLayout::vertical()      
+    )
+      .show_scrollbars(true)
+      .with_name("🖧 Ollama")
+  );
+
+    tabs.add_tab(
+    ScrollView::new(
+      LinearLayout::vertical()      
+    )
+      .show_scrollbars(true)
+      .with_name("⚒ Authentication")
   );
 
   tabs.add_tab(
     ScrollView::new(
       LinearLayout::vertical()
         .child(
-          Button::new_raw("Save Changes and Exit", |x| {
+          Button::new_raw("🖴 Save Changes and Exit", |x| {
             x.quit();
           })
         )
+                .child(
+          Button::new_raw("🖪 Backup current Config", move |x| {
+            let con: &mut Ptr<Config> = x.user_data().unwrap();
+
+            let con = unsafe { &*con.0 };
+
+            let file = format!("./config.bak.{}.json", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs());
+            fs::write(&file, to_string_pretty(con).unwrap()).unwrap();
+
+            x.add_layer(
+              Dialog::new()
+                .title("Successful")
+                .content(
+                  TextView::new(format!("Successfully backed up initial config at {file}"))
+                )
+                .dismiss_button("Ok")
+            );
+          })
+        )
         .child(
-          Button::new_raw("Backup Initial Config", move |x| {
+          Button::new_raw("🖪 Backup Initial Config", move |x| {
             let file = format!("./config.bak.{}.json", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs());
             fs::write(&file, to_string_pretty(&initial_config).unwrap()).unwrap();
 
@@ -64,13 +99,12 @@ pub fn ui() {
         )
     )
       .show_scrollbars(true)
-      .with_name("Exit")
+      .with_name("🖫 Save")
   );
   
-  _ = tabs.set_active_tab("Hosting");
+  _ = tabs.set_active_tab("☸ General");
   
-  siv.add_layer(Dialog::around(tabs.with_name("tabs")).full_screen());
-
+  siv.add_layer(Dialog::around(tabs.with_name("tabs")).title("AHQ-AI Server Configuration Utility").full_screen());
   siv.run();
 
   ASYNC.block_on(async move {
@@ -98,70 +132,103 @@ impl<T> DerefMut for Ptr<T> {
   }
 }
 
-fn port(s: Ptr<Config>) -> LinearLayout {
+fn binds(s: Ptr<Config>) -> LinearLayout {
   LinearLayout::horizontal()
-    .child(TextView::new("Port (0-65535)").full_width())
+    .child(TextView::new("🖳 Hostnames and Ports").full_width())
     .child(Button::new_raw(
-      format!("<{}>", s.port),
+      "View ↗",
       |x| {
-        x.add_layer(
-          Dialog::new()
-            .title("Enter port")
-            .content(
-              EditView::new()
-                .max_content_width(5)
-                .on_submit(|x, _| {
-                  x.pop_layer();
-                })
-                .on_edit(move |c, txt, _| {
-                  if let Ok(x) = txt.parse::<u16>() {
-                    c.with_user_data(|s: &mut Ptr<Config>| {
-                      s.port = x;
-                    });
+        // x.add_layer(
+        //   Dialog::new()
+        //     .title("Enter Hostname")
+        //     .content(
+        //       EditView::new()
+        //         .on_submit(|x, _| {
+        //           x.pop_layer();
+        //         })
+        //         .on_edit(move |c, txt, _| {
+        //           c.with_user_data(|s: &mut Ptr<Config>| {
+        //             s.host = txt.to_string();
+        //           });
 
-                    c.call_on_name("port", |c: &mut Button| {
-                      c.set_label(x.to_string());
-                    });
-                  }
-                }) 
-            )
-            .button("Done", |x| { x.pop_layer(); })
-        );
-      }
-    )
-      .with_name("port")
-      .max_width(7)
-    )
-}
-
-fn hostname(s: Ptr<Config>) -> LinearLayout {
-  LinearLayout::horizontal()
-    .child(TextView::new("Enter the hostname to use").full_width())
-    .child(Button::new_raw(
-      format!("[{}]", s.host),
-      |x| {
-        x.add_layer(
-          Dialog::new()
-            .title("Enter Hostname")
-            .content(
-              EditView::new()
-                .on_submit(|x, _| {
-                  x.pop_layer();
-                })
-                .on_edit(move |c, txt, _| {
-                  c.with_user_data(|s: &mut Ptr<Config>| {
-                    s.host = txt.to_string();
-                  });
-
-                  c.call_on_name("host", |c: &mut Button| {
-                    c.set_label_raw(format!("[{}]", txt),);
-                  });
-                }) 
-            )
-            .button("Done", |x| { x.pop_layer(); })
-        );
+        //           c.call_on_name("host", |c: &mut Button| {
+        //             c.set_label_raw(format!("[{}]", txt),);
+        //           });
+        //         }) 
+        //     )
+        //     .button("Done", |x| { x.pop_layer(); })
+        // );
       }
     )
       .with_name("host")
     )
 }
+
+
+// fn port(s: Ptr<Config>) -> LinearLayout {
+//   LinearLayout::horizontal()
+//     .child(TextView::new("Port (0-65535)").full_width())
+//     .child(Button::new_raw(
+//       format!("<{}>", s.port),
+//       |x| {
+//         x.add_layer(
+//           Dialog::new()
+//             .title("Enter port")
+//             .content(
+//               EditView::new()
+//                 .max_content_width(5)
+//                 .on_submit(|x, _| {
+//                   x.pop_layer();
+//                 })
+//                 .on_edit(move |c, txt, _| {
+//                   if let Ok(x) = txt.parse::<u16>() {
+//                     c.with_user_data(|s: &mut Ptr<Config>| {
+//                       s.port = x;
+//                     });
+
+//                     c.call_on_name("port", |c: &mut Button| {
+//                       c.set_label(x.to_string());
+//                     });
+//                   }
+//                 }) 
+//             )
+//             .button("Done", |x| { x.pop_layer(); })
+//         );
+//       }
+//     )
+//       .with_name("port")
+//       .max_width(7)
+//     )
+// }
+
+// fn hostname(s: Ptr<Config>) -> LinearLayout {
+//   LinearLayout::horizontal()
+//     .child(TextView::new("Enter the hostname to use").full_width())
+//     .child(Button::new_raw(
+//       format!("[{}]", s.host),
+//       |x| {
+//         x.add_layer(
+//           Dialog::new()
+//             .title("Enter Hostname")
+//             .content(
+//               EditView::new()
+//                 .on_submit(|x, _| {
+//                   x.pop_layer();
+//                 })
+//                 .on_edit(move |c, txt, _| {
+//                   c.with_user_data(|s: &mut Ptr<Config>| {
+//                     s.host = txt.to_string();
+//                   });
+
+//                   c.call_on_name("host", |c: &mut Button| {
+//                     c.set_label_raw(format!("[{}]", txt),);
+//                   });
+//                 }) 
+//             )
+//             .button("Done", |x| { x.pop_layer(); })
+//         );
+//       }
+//     )
+//       .with_name("host")
+//     )
+// }

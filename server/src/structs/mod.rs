@@ -8,19 +8,19 @@ pub mod error;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-  #[serde(default = "def_host")]
-  pub host: String,
-  pub port: u16,
+  #[serde(default = "def_bind")]
+  pub binds: Vec<(String, u16)>,
   pub ollama: OllamaConfiguration,
   pub authentication: Authentication,
 }
 
-fn def_host() -> String {
-  format!("0.0.0.0")
+fn def_bind() -> Vec<(String, u16)> {
+  vec![]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OllamaConfiguration {
+  pub host: String,
   pub port: u16,
   pub cvmodels: Vec<String>,
   pub txtmodels: Vec<String>
@@ -30,6 +30,7 @@ pub struct OllamaConfiguration {
 #[serde(tag = "kind")]
 pub enum Authentication {
   OpenToAll,
+  TokenBased,
   AccountAuthentication { config: AuthConfig },
 }
 
@@ -60,8 +61,7 @@ impl Config {
 impl Default for Config {
   fn default() -> Self {
     Self {
-      host: def_host(),
-      port: 3000,
+      binds: def_bind(),
       ollama: OllamaConfiguration::default(),
       authentication: Authentication::OpenToAll,
     }

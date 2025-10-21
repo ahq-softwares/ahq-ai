@@ -29,7 +29,6 @@ fn main() {
     }
   });
 
-  println!("Launch config ui: {config_ui}");
   if config_ui {
     ui::ui();
   } else {
