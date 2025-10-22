@@ -24,3 +24,5 @@ async-recursion = "^1"
 tokio = { version = "^1", features = ["fs", "sync", "rt"] }
 thiserror = "2.0.17"
 chalk_rs = "1.0.1"
+rand = "0.9.2"
+moka = { version = "0.12.11", features = ["future"] }

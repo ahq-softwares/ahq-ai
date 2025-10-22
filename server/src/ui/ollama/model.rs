@@ -106,7 +106,7 @@ fn iterate_layout(l: &mut LinearLayout, binds: &[String], cv: bool) {
   }
 
   binds.iter().enumerate().for_each(|(index, model)| {
-    l.add_child(layout_child(index, &model, cv));
+    l.add_child(layout_child(index, model, cv));
   });
 }
 

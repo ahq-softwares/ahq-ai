@@ -15,7 +15,7 @@ pub fn render(l: &mut LinearLayout) {
   l.add_child(
     LinearLayout::horizontal()
       .child(TextView::new("⚒ Token Manager").full_width())
-      .child(Button::new_raw("Launch Manager ↗", |_| {})),
+      .child(Button::new_raw("Use Admin API ↗", |_| {})),
   );
 
   l.add_child(DummyView::new().fixed_height(2));

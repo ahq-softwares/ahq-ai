@@ -6,20 +6,22 @@ use cursive::{
 
 use crate::{
   structs::{Authentication, Config},
-  ui::{Ptr, lazy::OnVisible},
+  ui::{Ptr, lazy::OnAuthStateUpdate},
 };
 
 mod open;
 mod token;
+mod user;
 
+#[allow(clippy::type_complexity)]
 pub fn auth_page(
-  siv: &Cursive,
+  siv: &mut Cursive,
 ) -> NamedView<
-  OnVisible<NamedView<ScrollView<NamedView<LinearLayout>>>, impl Fn(&mut Cursive) + 'static>,
+  OnAuthStateUpdate<NamedView<ScrollView<NamedView<LinearLayout>>>, impl Fn(&mut Cursive) + 'static>,
 > {
   let layout = LinearLayout::vertical().with_name("authpage");
 
-  OnVisible::new(
+  OnAuthStateUpdate::new(
     ScrollView::new(layout)
       .show_scrollbars(true)
       .with_name("⚒ Authentication"),
@@ -35,7 +37,10 @@ pub fn auth_page(
         match auth {
           Authentication::OpenToAll => open::render(layout),
           Authentication::TokenBased => token::render(layout),
-          _ => {}
+          Authentication::Account {
+            registration_allowed,
+            max_users,
+          } => user::render(layout, registration_allowed, max_users),
         }
       });
     },

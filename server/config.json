@@ -13,6 +13,8 @@
     "txtmodels": []
   },
   "authentication": {
-    "kind": "TokenBased"
+    "kind": "Account",
+    "registration_allowed": true,
+    "max_users": 5421
   }
 }

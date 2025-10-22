@@ -27,14 +27,14 @@ pub struct OllamaConfiguration {
   pub txtmodels: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind")]
 pub enum Authentication {
   OpenToAll,
   TokenBased,
-  AccountAuthentication {
+  Account {
     registration_allowed: bool,
-    max_users: Option<u16>,
+    max_users: Option<u64>,
   },
 }
 

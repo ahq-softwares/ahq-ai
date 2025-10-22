@@ -1,8 +1,10 @@
+#![feature(duration_constructors)]
 use std::{env::args, panic};
 
 mod server;
 mod ui;
 
+pub mod auth;
 pub(crate) mod structs;
 
 fn main() {
@@ -20,7 +22,7 @@ fn main() {
 
   let mut config_ui = false;
 
-  args.into_iter().for_each(|x| {
+  args.for_each(|x| {
     if &x == "config" {
       config_ui = true;
     } else {

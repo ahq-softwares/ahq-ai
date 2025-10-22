@@ -81,19 +81,18 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
       .child(Button::new_raw("Set/Update ↗", move |x| {
         x.add_layer(
           Dialog::around(
-            LinearLayout::vertical().child(EditView::new().secret().on_submit(|x, txt| {
-              let c_: &mut Ptr<Config> = x.user_data().unwrap();
+            LinearLayout::vertical()
+              .child(EditView::new().secret().on_submit(|x, txt| {
+                let c_: &mut Ptr<Config> = x.user_data().unwrap();
 
-              c_.admin_pass_hash = Some(hash(txt, DEFAULT_COST).expect("Unknown error"));
+                c_.admin_pass_hash = Some(hash(txt, DEFAULT_COST).expect("Unknown error"));
 
-              x.pop_layer();
-            }))
-            .child(
-              TextView::new("Press Enter key to submit")
-            )
-            .child(
-              TextView::new("The UI might hand for a moment due to hashing algorithm")
-            ),
+                x.pop_layer();
+              }))
+              .child(TextView::new("Press Enter key to submit"))
+              .child(TextView::new(
+                "The UI might hand for a moment due to hashing algorithm",
+              )),
           )
           .title("New Administrator Password")
           .dismiss_button("Cancel"),
@@ -117,7 +116,7 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
             match c_.authentication {
               Authentication::OpenToAll => "No Auth",
               Authentication::TokenBased => "Token",
-              Authentication::AccountAuthentication { .. } => "Accounts",
+              Authentication::Account { .. } => "Account",
             }
           ),
           move |x| {
@@ -126,14 +125,14 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
                 SelectView::new()
                   .item("No Auth (OpenToAll)", 0u8)
                   .item("Token (TokenBased)", 1u8)
-                  .item("Accounts (AccountAuthentication)", 2u8)
+                  .item("Account (Account)", 2u8)
                   .on_submit(|x, bit| {
                     let c_: &mut Ptr<Config> = x.user_data().unwrap();
 
                     c_.authentication = match bit {
                       0 => Authentication::OpenToAll,
                       1 => Authentication::TokenBased,
-                      2 => Authentication::AccountAuthentication {
+                      2 => Authentication::Account {
                         registration_allowed: true,
                         max_users: None,
                       },
@@ -145,7 +144,7 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
                       match c_.authentication {
                         Authentication::OpenToAll => "No Auth",
                         Authentication::TokenBased => "Token",
-                        Authentication::AccountAuthentication { .. } => "Accounts",
+                        Authentication::Account { .. } => "Account",
                       }
                     );
 
@@ -247,7 +246,7 @@ pub fn ui() {
 
   tabs.add_tab(ollama::ollama_page(c_.clone()));
 
-  tabs.add_tab(auth::auth_page(&siv));
+  tabs.add_tab(auth::auth_page(&mut siv));
 
   tabs.add_tab(
     ScrollView::new(
