@@ -45,7 +45,7 @@ fn add_model(cv: bool) -> Dialog {
         &mut data.ollama.txtmodels
       };
 
-      state_.push(model.to_string());
+      state_.push(model.to_string().into_boxed_str());
 
       let state = state_.clone();
 
@@ -79,7 +79,7 @@ fn gen_cnt(s: Ptr<Config>, cv: bool) -> NamedView<LinearLayout> {
   layout.with_name("models")
 }
 
-fn iterate_layout(l: &mut LinearLayout, binds: &[String], cv: bool) {
+fn iterate_layout(l: &mut LinearLayout, binds: &[Box<str>], cv: bool) {
   l.clear();
 
   if binds.is_empty() {

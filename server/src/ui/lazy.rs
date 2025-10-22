@@ -24,7 +24,7 @@ impl<V: View, F: Fn(&mut Cursive) + 'static> OnAuthStateUpdate<V, F> {
         match data.authentication {
           Authentication::Account { .. } => Authentication::TokenBased,
           Authentication::OpenToAll => Authentication::TokenBased,
-          Authentication::TokenBased => Authentication::OpenToAll
+          Authentication::TokenBased => Authentication::OpenToAll,
         }
       })),
       callback,
@@ -50,7 +50,7 @@ impl<V: View, T: Fn(&mut Cursive) + Send + Sync + 'static> ViewWrapper for OnAut
 
       if &*lock != auth {
         *lock = auth.clone();
-        
+
         (cb_ref)(x);
       }
     }));

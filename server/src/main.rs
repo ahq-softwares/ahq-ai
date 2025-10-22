@@ -34,6 +34,6 @@ fn main() {
   if config_ui {
     ui::ui();
   } else {
-    server::launch();
+    server::main().unwrap();
   }
 }

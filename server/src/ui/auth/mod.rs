@@ -17,7 +17,10 @@ mod user;
 pub fn auth_page(
   siv: &mut Cursive,
 ) -> NamedView<
-  OnAuthStateUpdate<NamedView<ScrollView<NamedView<LinearLayout>>>, impl Fn(&mut Cursive) + 'static>,
+  OnAuthStateUpdate<
+    NamedView<ScrollView<NamedView<LinearLayout>>>,
+    impl Fn(&mut Cursive) + 'static,
+  >,
 > {
   let layout = LinearLayout::vertical().with_name("authpage");
 

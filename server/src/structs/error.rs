@@ -1,3 +1,4 @@
+use actix_web::http::StatusCode;
 use thiserror::Error;
 
 use bcrypt::BcryptError;
@@ -17,6 +18,12 @@ pub enum ServerError {
   StringConvertErr,
   #[error(transparent)]
   BcryptErr(#[from] BcryptError),
+}
+
+impl actix_web::error::ResponseError for ServerError {
+  fn status_code(&self) -> actix_web::http::StatusCode {
+    StatusCode::INTERNAL_SERVER_ERROR
+  }
 }
 
 pub type Returns<T> = Result<T, ServerError>;
