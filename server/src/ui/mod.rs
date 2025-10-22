@@ -11,7 +11,7 @@ use cursive::{
   align::Align,
   theme::{Effect, PaletteColor, Style, Theme},
   view::{Nameable, Resizable},
-  views::{Button, Dialog, DummyView, LinearLayout, ScrollView, SelectView, TextView},
+  views::{Button, Dialog, DummyView, EditView, LinearLayout, ScrollView, SelectView, TextView},
 };
 use cursive_tabs::TabPanel;
 use serde_json::to_string_pretty;
@@ -31,6 +31,8 @@ pub static ASYNC: LazyLock<Runtime> = LazyLock::new(|| {
     .build()
     .expect("Unable to build async runtime")
 });
+
+use bcrypt::{DEFAULT_COST, hash};
 
 fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
   l.add_child(
@@ -72,6 +74,38 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
   l.add_child(TextView::new("General Settings").style(Style::merge(&[Effect::Underline.into()])));
 
   l.add_child(binds(c_.clone()));
+
+  l.add_child(
+    LinearLayout::horizontal()
+      .child(TextView::new("⚒ Administrator Password").full_width())
+      .child(Button::new_raw("Set/Update ↗", move |x| {
+        x.add_layer(
+          Dialog::around(
+            LinearLayout::vertical().child(EditView::new().secret().on_submit(|x, txt| {
+              let c_: &mut Ptr<Config> = x.user_data().unwrap();
+
+              c_.admin_pass_hash = Some(hash(txt, DEFAULT_COST).expect("Unknown error"));
+
+              x.pop_layer();
+            }))
+            .child(
+              TextView::new("Press Enter key to submit")
+            )
+            .child(
+              TextView::new("The UI might hand for a moment due to hashing algorithm")
+            ),
+          )
+          .title("New Administrator Password")
+          .dismiss_button("Cancel"),
+        );
+      }))
+      .child(DummyView::new().fixed_width(2))
+      .child(Button::new_raw("Remove ↗", move |x| {
+        let c_: &mut Ptr<Config> = x.user_data().unwrap();
+
+        c_.admin_pass_hash = None;
+      })),
+  );
 
   l.add_child(
     LinearLayout::horizontal()

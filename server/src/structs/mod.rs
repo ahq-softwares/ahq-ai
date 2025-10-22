@@ -10,6 +10,7 @@ pub mod error;
 pub struct Config {
   #[serde(default = "def_bind")]
   pub binds: Vec<(String, u16)>,
+  pub admin_pass_hash: Option<String>,
   pub ollama: OllamaConfiguration,
   pub authentication: Authentication,
 }
@@ -59,6 +60,7 @@ impl Default for Config {
   fn default() -> Self {
     Self {
       binds: def_bind(),
+      admin_pass_hash: None,
       ollama: OllamaConfiguration::default(),
       authentication: Authentication::OpenToAll,
     }

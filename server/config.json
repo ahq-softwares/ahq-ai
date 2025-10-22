@@ -5,6 +5,7 @@
       3124
     ]
   ],
+  "admin_pass_hash": "$2b$12$0ZwdvLnipzYlbJuELIp/fOHoHGjJh97kYbwMnishW4srDNethbCbW",
   "ollama": {
     "host": "127.0.0.1",
     "port": 3000,

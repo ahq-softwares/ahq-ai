@@ -16,9 +16,7 @@ impl<V: View, F: Fn(&mut Cursive) + 'static> OnVisible<V, F> {
     Self {
       inner,
       sink: siv.cb_sink().clone(),
-      last_call: Arc::new(Mutex::new(
-        0,
-      )),
+      last_call: Arc::new(Mutex::new(0)),
       callback: callback,
     }
   }

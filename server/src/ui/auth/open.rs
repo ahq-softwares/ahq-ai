@@ -1,5 +1,8 @@
 use cursive::{
-  align::Align, theme::{Effect, Style}, view::Resizable, views::{Button, DummyView, LinearLayout, TextView}
+  align::Align,
+  theme::{Effect, Style},
+  view::Resizable,
+  views::{Button, DummyView, LinearLayout, TextView},
 };
 
 pub fn render(l: &mut LinearLayout) {
@@ -9,15 +12,15 @@ pub fn render(l: &mut LinearLayout) {
       .child(Button::new_raw("No Auth (OpenToAll)", |_| {})),
   );
 
-  l.add_child(
-    DummyView::new()
-      .fixed_height(2)
-  );
+  l.add_child(DummyView::new().fixed_height(2));
 
   l.add_child(
     TextView::new("No Auth")
       .align(Align::center())
-      .style(Style::merge(&[Effect::Dim.into(), Effect::Underline.into()]))
+      .style(Style::merge(&[
+        Effect::Dim.into(),
+        Effect::Underline.into(),
+      ])),
   );
 
   l.add_child(
