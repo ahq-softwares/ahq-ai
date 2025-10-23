@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use serde::Serialize;
 
 use crate::{server::CONFIG, structs::Authentication};
@@ -6,15 +8,21 @@ use crate::{server::CONFIG, structs::Authentication};
 pub enum ShowedAuth {
   OpenToAll,
   TokenBased,
-  Account
+  Account,
 }
+
+pub static ROOT_RESPONSE_DATA: LazyLock<Vec<u8>> = LazyLock::new(|| {
+  let root_response = RootResponse::new();
+
+  serde_json::to_vec(&root_response).expect("Failed to serialize static RootResponse")
+});
 
 #[derive(Serialize)]
 pub struct RootResponse {
   auth: ShowedAuth,
   can_register: bool,
   vision_models: Vec<&'static str>,
-  text_models: Vec<&'static str>
+  text_models: Vec<&'static str>,
 }
 
 impl RootResponse {
@@ -23,11 +31,14 @@ impl RootResponse {
       auth: ShowedAuth::OpenToAll,
       can_register: false,
       text_models: vec![],
-      vision_models: vec![]
+      vision_models: vec![],
     };
 
     match CONFIG.authentication {
-      Authentication::Account { registration_allowed, .. } => {
+      Authentication::Account {
+        registration_allowed,
+        ..
+      } => {
         out.can_register = registration_allowed;
         out.auth = ShowedAuth::Account;
       }
@@ -41,7 +52,7 @@ impl RootResponse {
 
     out.text_models.reserve(CONFIG.ollama.txtmodels.len());
     out.vision_models.reserve(CONFIG.ollama.cvmodels.len());
-    
+
     CONFIG.ollama.cvmodels.iter().for_each(|x| {
       out.vision_models.push(x as &str);
     });
@@ -49,7 +60,7 @@ impl RootResponse {
     CONFIG.ollama.txtmodels.iter().for_each(|x| {
       out.text_models.push(x as &str);
     });
-    
+
     out
   }
 }

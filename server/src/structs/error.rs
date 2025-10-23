@@ -1,4 +1,5 @@
 use actix_web::http::StatusCode;
+use base64::DecodeError;
 use thiserror::Error;
 
 use bcrypt::BcryptError;
@@ -10,6 +11,8 @@ use tokio::task::JoinError;
 pub enum ServerError {
   #[error(transparent)]
   Serde(#[from] SerdeError),
+  #[error(transparent)]
+  Base64(#[from] DecodeError),
   #[error(transparent)]
   TokioJoinError(#[from] JoinError),
   #[error(transparent)]

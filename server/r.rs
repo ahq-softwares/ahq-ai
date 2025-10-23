@@ -6,7 +6,295 @@ extern crate std;
 use std::prelude::rust_2024::*;
 use std::{env::args, panic};
 mod server {
-    pub fn launch() {}
+    use std::{
+        fs as stdfs, sync::{LazyLock, OnceLock},
+        thread::available_parallelism,
+    };
+    use actix_web::{App, HttpServer};
+    use chalk_rs::Chalk;
+    use ollama_rs::Ollama;
+    use serde_json::from_str;
+    use crate::{auth::AuthSessionManager, structs::Config};
+    pub mod http {
+        use actix_web::{HttpResponse, Responder, Result, get, http::header::ContentType};
+        use crate::server::http::structs::ROOT_RESPONSE_DATA;
+        pub mod structs {
+            use std::sync::LazyLock;
+            use serde::Serialize;
+            use crate::{server::CONFIG, structs::Authentication};
+            pub enum ShowedAuth {
+                OpenToAll,
+                TokenBased,
+                Account,
+            }
+            #[doc(hidden)]
+            #[allow(
+                non_upper_case_globals,
+                unused_attributes,
+                unused_qualifications,
+                clippy::absolute_paths,
+            )]
+            const _: () = {
+                #[allow(unused_extern_crates, clippy::useless_attribute)]
+                extern crate serde as _serde;
+                #[automatically_derived]
+                impl _serde::Serialize for ShowedAuth {
+                    fn serialize<__S>(
+                        &self,
+                        __serializer: __S,
+                    ) -> _serde::__private228::Result<__S::Ok, __S::Error>
+                    where
+                        __S: _serde::Serializer,
+                    {
+                        match *self {
+                            ShowedAuth::OpenToAll => {
+                                _serde::Serializer::serialize_unit_variant(
+                                    __serializer,
+                                    "ShowedAuth",
+                                    0u32,
+                                    "OpenToAll",
+                                )
+                            }
+                            ShowedAuth::TokenBased => {
+                                _serde::Serializer::serialize_unit_variant(
+                                    __serializer,
+                                    "ShowedAuth",
+                                    1u32,
+                                    "TokenBased",
+                                )
+                            }
+                            ShowedAuth::Account => {
+                                _serde::Serializer::serialize_unit_variant(
+                                    __serializer,
+                                    "ShowedAuth",
+                                    2u32,
+                                    "Account",
+                                )
+                            }
+                        }
+                    }
+                }
+            };
+            pub static ROOT_RESPONSE_DATA: LazyLock<Vec<u8>> = LazyLock::new(|| {
+                let root_response = RootResponse::new();
+                serde_json::to_vec(&root_response)
+                    .expect("Failed to serialize static RootResponse")
+            });
+            pub struct RootResponse {
+                auth: ShowedAuth,
+                can_register: bool,
+                vision_models: Vec<&'static str>,
+                text_models: Vec<&'static str>,
+            }
+            #[doc(hidden)]
+            #[allow(
+                non_upper_case_globals,
+                unused_attributes,
+                unused_qualifications,
+                clippy::absolute_paths,
+            )]
+            const _: () = {
+                #[allow(unused_extern_crates, clippy::useless_attribute)]
+                extern crate serde as _serde;
+                #[automatically_derived]
+                impl _serde::Serialize for RootResponse {
+                    fn serialize<__S>(
+                        &self,
+                        __serializer: __S,
+                    ) -> _serde::__private228::Result<__S::Ok, __S::Error>
+                    where
+                        __S: _serde::Serializer,
+                    {
+                        let mut __serde_state = _serde::Serializer::serialize_struct(
+                            __serializer,
+                            "RootResponse",
+                            false as usize + 1 + 1 + 1 + 1,
+                        )?;
+                        _serde::ser::SerializeStruct::serialize_field(
+                            &mut __serde_state,
+                            "auth",
+                            &self.auth,
+                        )?;
+                        _serde::ser::SerializeStruct::serialize_field(
+                            &mut __serde_state,
+                            "can_register",
+                            &self.can_register,
+                        )?;
+                        _serde::ser::SerializeStruct::serialize_field(
+                            &mut __serde_state,
+                            "vision_models",
+                            &self.vision_models,
+                        )?;
+                        _serde::ser::SerializeStruct::serialize_field(
+                            &mut __serde_state,
+                            "text_models",
+                            &self.text_models,
+                        )?;
+                        _serde::ser::SerializeStruct::end(__serde_state)
+                    }
+                }
+            };
+            impl RootResponse {
+                pub fn new() -> Self {
+                    let mut out = Self {
+                        auth: ShowedAuth::OpenToAll,
+                        can_register: false,
+                        text_models: ::alloc::vec::Vec::new(),
+                        vision_models: ::alloc::vec::Vec::new(),
+                    };
+                    match CONFIG.authentication {
+                        Authentication::Account { registration_allowed, .. } => {
+                            out.can_register = registration_allowed;
+                            out.auth = ShowedAuth::Account;
+                        }
+                        Authentication::OpenToAll => {
+                            out.auth = ShowedAuth::OpenToAll;
+                        }
+                        Authentication::TokenBased => {
+                            out.auth = ShowedAuth::TokenBased;
+                        }
+                    }
+                    out.text_models.reserve(CONFIG.ollama.txtmodels.len());
+                    out.vision_models.reserve(CONFIG.ollama.cvmodels.len());
+                    CONFIG
+                        .ollama
+                        .cvmodels
+                        .iter()
+                        .for_each(|x| {
+                            out.vision_models.push(x as &str);
+                        });
+                    CONFIG
+                        .ollama
+                        .txtmodels
+                        .iter()
+                        .for_each(|x| {
+                            out.text_models.push(x as &str);
+                        });
+                    out
+                }
+            }
+        }
+        #[allow(non_camel_case_types, missing_docs)]
+        pub struct index;
+        impl ::actix_web::dev::HttpServiceFactory for index {
+            fn register(self, __config: &mut actix_web::dev::AppService) {
+                async fn index() -> impl Responder {
+                    HttpResponse::Ok()
+                        .content_type(ContentType::json())
+                        .body::<&[u8]>(ROOT_RESPONSE_DATA.as_ref())
+                }
+                let __resource = ::actix_web::Resource::new("/")
+                    .name("index")
+                    .guard(::actix_web::guard::Get())
+                    .to(index);
+                ::actix_web::dev::HttpServiceFactory::register(__resource, __config);
+            }
+        }
+    }
+    pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
+        let data = stdfs::read_to_string("config.json").expect("Unable to load config");
+        from_str(&data).expect("Invalid configuration file, unable to parse")
+    });
+    pub static AUTH: OnceLock<AuthSessionManager> = OnceLock::new();
+    pub static OLLAMA: LazyLock<Ollama> = LazyLock::new(|| {
+        Ollama::new(CONFIG.ollama.host.as_ref(), CONFIG.ollama.port)
+    });
+    pub fn launch() -> Chalk {
+        let mut chalk = Chalk::new();
+        chalk
+            .blue()
+            .bold()
+            .println(
+                &::alloc::__export::must_use({
+                    ::alloc::fmt::format(format_args!("AHQ-AI Server v{0}", "0.1.0"))
+                }),
+            );
+        chalk.reset_style();
+        chalk
+    }
+    pub fn main() -> std::io::Result<()> {
+        <::actix_web::rt::System>::new()
+            .block_on(async move {
+                {
+                    let mut chalk = launch();
+                    _ = AUTH.set(AuthSessionManager::create(&CONFIG).await);
+                    if OLLAMA.list_local_models().await.is_err() {
+                        {
+                            ::std::io::_print(format_args!("----------------\n"));
+                        };
+                        chalk
+                            .red()
+                            .println(
+                                &"Connection to ollama failed. Are you sure configuration is correct?",
+                            );
+                        {
+                            ::std::io::_print(format_args!("----------------\n"));
+                        };
+                    }
+                    let mut server = HttpServer::new(|| App::new().service(http::index))
+                        .workers(available_parallelism()?.get());
+                    for (host, port) in &CONFIG.binds {
+                        chalk
+                            .blue()
+                            .println(
+                                &::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("Binding to {0}:{1}", host, port),
+                                    )
+                                }),
+                            );
+                        server = server.bind((host as &str, *port))?;
+                    }
+                    {
+                        ::std::io::_print(format_args!("----------------\n"));
+                    };
+                    chalk.blue().println(&"Server is ready!");
+                    {
+                        ::std::io::_print(format_args!("----------------\n"));
+                    };
+                    {
+                        ::std::io::_print(format_args!("\n"));
+                    };
+                    let out = server.run().await;
+                    if let Err(e) = &out {
+                        {
+                            ::std::io::_print(format_args!("----------------\n"));
+                        };
+                        chalk.red().bold().println(&"Server Exited in an error state");
+                        {
+                            ::std::io::_print(format_args!("{0}\n", e));
+                        };
+                    }
+                    {
+                        ::std::io::_print(format_args!("----------------\n"));
+                    };
+                    chalk
+                        .reset_style()
+                        .blue()
+                        .bold()
+                        .println(
+                            &"Starting shutdown procedure. Saving server state to disk... This might take a while",
+                        );
+                    chalk
+                        .red()
+                        .bold()
+                        .println(
+                            &"Please DO NOT use Ctrl+C to terminate. It will lead to data corruption!",
+                        );
+                    {
+                        ::std::io::_print(format_args!("Shutdown Action\n"));
+                    };
+                    chalk
+                        .reset_style()
+                        .blue()
+                        .bold()
+                        .println(
+                            &"Server state has been successfully set! Closing server",
+                        );
+                    out
+                }
+            })
+    }
 }
 mod ui {
     use std::{
@@ -496,7 +784,7 @@ mod ui {
                             } else {
                                 &mut data.ollama.txtmodels
                             };
-                            state_.push(model.to_string());
+                            state_.push(model.to_string().into_boxed_str());
                             let state = state_.clone();
                             x.call_on_name(
                                 "models",
@@ -523,7 +811,7 @@ mod ui {
                 );
                 layout.with_name("models")
             }
-            fn iterate_layout(l: &mut LinearLayout, binds: &[String], cv: bool) {
+            fn iterate_layout(l: &mut LinearLayout, binds: &[Box<str>], cv: bool) {
                 l.clear();
                 if binds.is_empty() {
                     l.add_child(TextView::new("No models detected"));
@@ -1179,9 +1467,10 @@ mod ui {
 }
 pub mod auth {
     use moka::future::Cache;
-    use rand::seq::IndexedRandom;
+    use rand::{Rng, seq::IndexedRandom};
     use serde_json::Deserializer;
     use std::{io::BufReader, sync::Arc, time::{Duration, SystemTime, UNIX_EPOCH}};
+    use base64::{engine::general_purpose, Engine as _};
     use tokio::{fs::File, task::spawn_blocking};
     use bcrypt::{DEFAULT_COST, hash, verify};
     use crate::structs::{Authentication, Config, error::Returns};
@@ -1254,13 +1543,22 @@ pub mod auth {
         let hashed = hash(&token, DEFAULT_COST)?;
         Ok((token, hashed))
     }
+    pub async fn parse_session_token_async(token: &str) -> Returns<Vec<u8>> {
+        let token: &'static str = unsafe { &*(token as *const str) };
+        spawn_blocking(move || parse_session_token(token)).await?
+    }
     pub async fn gen_session_token_async() -> Returns<(String, Hashed)> {
         spawn_blocking(gen_session_token).await?
     }
     pub fn gen_session_token() -> Returns<(String, Hashed)> {
-        let token = VALUES.choose_multiple(&mut rand::rng(), 64).collect::<String>();
+        let mut rng = rand::rng();
+        let token = ::alloc::vec::from_elem(rng.random::<u8>(), 128);
+        let token = general_purpose::URL_SAFE_NO_PAD.encode(&token);
         let hashed = hash(&token, DEFAULT_COST)?;
         Ok((token, hashed))
+    }
+    pub fn parse_session_token(token: &str) -> Returns<Vec<u8>> {
+        Ok(general_purpose::URL_SAFE_NO_PAD.decode(token)?)
     }
 }
 pub(crate) mod structs {
@@ -1269,6 +1567,8 @@ pub(crate) mod structs {
     use tokio::fs;
     use crate::structs::error::Returns;
     pub mod error {
+        use actix_web::http::StatusCode;
+        use base64::DecodeError;
         use thiserror::Error;
         use bcrypt::BcryptError;
         use serde_json::Error as SerdeError;
@@ -1277,6 +1577,8 @@ pub(crate) mod structs {
         pub enum ServerError {
             #[error(transparent)]
             Serde(#[from] SerdeError),
+            #[error(transparent)]
+            Base64(#[from] DecodeError),
             #[error(transparent)]
             TokioJoinError(#[from] JoinError),
             #[error(transparent)]
@@ -1295,6 +1597,13 @@ pub(crate) mod structs {
                         ::core::fmt::Formatter::debug_tuple_field1_finish(
                             f,
                             "Serde",
+                            &__self_0,
+                        )
+                    }
+                    ServerError::Base64(__self_0) => {
+                        ::core::fmt::Formatter::debug_tuple_field1_finish(
+                            f,
+                            "Base64",
                             &__self_0,
                         )
                     }
@@ -1341,6 +1650,11 @@ pub(crate) mod structs {
                             transparent.as_dyn_error(),
                         )
                     }
+                    ServerError::Base64 { 0: transparent } => {
+                        ::thiserror::__private17::Error::source(
+                            transparent.as_dyn_error(),
+                        )
+                    }
                     ServerError::TokioJoinError { 0: transparent } => {
                         ::thiserror::__private17::Error::source(
                             transparent.as_dyn_error(),
@@ -1370,6 +1684,7 @@ pub(crate) mod structs {
                 #[allow(unused_variables, deprecated, clippy::used_underscore_binding)]
                 match self {
                     ServerError::Serde(_0) => ::core::fmt::Display::fmt(_0, __formatter),
+                    ServerError::Base64(_0) => ::core::fmt::Display::fmt(_0, __formatter),
                     ServerError::TokioJoinError(_0) => {
                         ::core::fmt::Display::fmt(_0, __formatter)
                     }
@@ -1393,6 +1708,18 @@ pub(crate) mod structs {
         impl ::core::convert::From<SerdeError> for ServerError {
             fn from(source: SerdeError) -> Self {
                 ServerError::Serde { 0: source }
+            }
+        }
+        #[allow(
+            deprecated,
+            unused_qualifications,
+            clippy::elidable_lifetime_names,
+            clippy::needless_lifetimes,
+        )]
+        #[automatically_derived]
+        impl ::core::convert::From<DecodeError> for ServerError {
+            fn from(source: DecodeError) -> Self {
+                ServerError::Base64 { 0: source }
             }
         }
         #[allow(
@@ -1433,6 +1760,11 @@ pub(crate) mod structs {
                 ServerError::BcryptErr {
                     0: source,
                 }
+            }
+        }
+        impl actix_web::error::ResponseError for ServerError {
+            fn status_code(&self) -> actix_web::http::StatusCode {
+                StatusCode::INTERNAL_SERVER_ERROR
             }
         }
         pub type Returns<T> = Result<T, ServerError>;
@@ -1838,13 +2170,18 @@ pub(crate) mod structs {
         }
     };
     fn def_bind() -> Vec<(String, u16)> {
-        <[_]>::into_vec(::alloc::boxed::box_new([("0.0.0.0".to_string(), 3000)]))
+        <[_]>::into_vec(
+            ::alloc::boxed::box_new([
+                ("0.0.0.0".to_string(), 3000),
+                ("localhost".to_string(), 3000),
+            ]),
+        )
     }
     pub struct OllamaConfiguration {
-        pub host: String,
+        pub host: Box<str>,
         pub port: u16,
-        pub cvmodels: Vec<String>,
-        pub txtmodels: Vec<String>,
+        pub cvmodels: Vec<Box<str>>,
+        pub txtmodels: Vec<Box<str>>,
     }
     #[automatically_derived]
     impl ::core::fmt::Debug for OllamaConfiguration {
@@ -2052,7 +2389,7 @@ pub(crate) mod structs {
                         __A: _serde::de::SeqAccess<'de>,
                     {
                         let __field0 = match _serde::de::SeqAccess::next_element::<
-                            String,
+                            Box<str>,
                         >(&mut __seq)? {
                             _serde::__private228::Some(__value) => __value,
                             _serde::__private228::None => {
@@ -2078,7 +2415,7 @@ pub(crate) mod structs {
                             }
                         };
                         let __field2 = match _serde::de::SeqAccess::next_element::<
-                            Vec<String>,
+                            Vec<Box<str>>,
                         >(&mut __seq)? {
                             _serde::__private228::Some(__value) => __value,
                             _serde::__private228::None => {
@@ -2091,7 +2428,7 @@ pub(crate) mod structs {
                             }
                         };
                         let __field3 = match _serde::de::SeqAccess::next_element::<
-                            Vec<String>,
+                            Vec<Box<str>>,
                         >(&mut __seq)? {
                             _serde::__private228::Some(__value) => __value,
                             _serde::__private228::None => {
@@ -2118,10 +2455,10 @@ pub(crate) mod structs {
                     where
                         __A: _serde::de::MapAccess<'de>,
                     {
-                        let mut __field0: _serde::__private228::Option<String> = _serde::__private228::None;
+                        let mut __field0: _serde::__private228::Option<Box<str>> = _serde::__private228::None;
                         let mut __field1: _serde::__private228::Option<u16> = _serde::__private228::None;
-                        let mut __field2: _serde::__private228::Option<Vec<String>> = _serde::__private228::None;
-                        let mut __field3: _serde::__private228::Option<Vec<String>> = _serde::__private228::None;
+                        let mut __field2: _serde::__private228::Option<Vec<Box<str>>> = _serde::__private228::None;
+                        let mut __field3: _serde::__private228::Option<Vec<Box<str>>> = _serde::__private228::None;
                         while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
                             __Field,
                         >(&mut __map)? {
@@ -2133,7 +2470,7 @@ pub(crate) mod structs {
                                         );
                                     }
                                     __field0 = _serde::__private228::Some(
-                                        _serde::de::MapAccess::next_value::<String>(&mut __map)?,
+                                        _serde::de::MapAccess::next_value::<Box<str>>(&mut __map)?,
                                     );
                                 }
                                 __Field::__field1 => {
@@ -2156,7 +2493,7 @@ pub(crate) mod structs {
                                     }
                                     __field2 = _serde::__private228::Some(
                                         _serde::de::MapAccess::next_value::<
-                                            Vec<String>,
+                                            Vec<Box<str>>,
                                         >(&mut __map)?,
                                     );
                                 }
@@ -2170,7 +2507,7 @@ pub(crate) mod structs {
                                     }
                                     __field3 = _serde::__private228::Some(
                                         _serde::de::MapAccess::next_value::<
-                                            Vec<String>,
+                                            Vec<Box<str>>,
                                         >(&mut __map)?,
                                     );
                                 }
@@ -2826,6 +3163,6 @@ fn main() {
     if config_ui {
         ui::ui();
     } else {
-        server::launch();
+        server::main().unwrap();
     }
 }

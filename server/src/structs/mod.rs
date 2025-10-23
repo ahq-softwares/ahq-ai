@@ -16,7 +16,10 @@ pub struct Config {
 }
 
 fn def_bind() -> Vec<(String, u16)> {
-  vec![("0.0.0.0".to_string(), 3000)]
+  vec![
+    ("0.0.0.0".to_string(), 3000),
+    ("localhost".to_string(), 3000),
+  ]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

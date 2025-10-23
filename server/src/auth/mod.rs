@@ -1,8 +1,9 @@
+use base64::{Engine as _, engine::general_purpose};
 use moka::future::Cache;
-use rand::seq::IndexedRandom;
+use rand::{Rng, seq::IndexedRandom};
 use serde_json::Deserializer;
 use std::{
-  io::BufReader,
+  io::{BufReader, Write},
   sync::Arc,
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -12,10 +13,6 @@ use tokio::{fs::File, task::spawn_blocking};
 use bcrypt::{DEFAULT_COST, hash, verify};
 
 use crate::structs::{Authentication, Config, error::Returns};
-
-// Assumption
-// - The Server is safe
-// - The User ain't hacked
 
 // TODO: Use these types
 #[allow(dead_code)]
@@ -30,7 +27,7 @@ pub type Account = (Box<str>, Box<str>);
 impl AuthSessionManager {
   pub async fn create(config: &Config) -> Self {
     let sessions = Cache::builder()
-      .time_to_live(Duration::from_days(60))
+      .time_to_live(Duration::from_days(30))
       .build();
 
     let accounts = Cache::builder().build();
@@ -38,29 +35,27 @@ impl AuthSessionManager {
     let token = matches!(config.authentication, Authentication::TokenBased);
 
     if token {
-      if let Ok(x) = File::open("./tokens.json").await {
+      if let Ok(x) = File::open("./tokens.jsonl").await {
         let x = x.into_std().await;
 
         let x = BufReader::new(x);
 
         let list = Deserializer::from_reader(x)
           .into_iter::<Box<str>>()
-          .map(|x| x.unwrap())
-          .collect::<Vec<_>>();
+          .map(|x| x.unwrap());
 
         for token_hash in list {
           accounts.insert(token_hash, None).await;
         }
       }
-    } else if let Ok(x) = File::open("./accounts.json").await {
+    } else if let Ok(x) = File::open("./accounts.jsonl").await {
       let x = x.into_std().await;
 
       let x = BufReader::new(x);
 
       let list = Deserializer::from_reader(x)
         .into_iter::<Account>()
-        .map(|x| x.unwrap())
-        .collect::<Vec<_>>();
+        .map(|x| x.unwrap());
 
       for (userid, pwd_hash) in list {
         accounts.insert(userid, Some(pwd_hash)).await;
@@ -74,7 +69,52 @@ impl AuthSessionManager {
     }
   }
 
-  pub async fn before_exit() {}
+  pub async fn before_exit(&self) -> Returns<()> {
+    if self.token {
+      let file = File::create("tokens.jsonl").await?;
+      let mut file = file.into_std().await;
+
+      let data = self.accounts.iter().map(|(k, _)| {
+        let uid = &*k;
+        let uid = uid.clone();
+
+        (uid, None::<Box<str>>)
+      });
+
+      for data in data {
+        serde_json::to_writer(&mut file, &data)?;
+
+        file.write(b"\n")?;
+        file.flush()?;
+      }
+
+      file.flush()?;
+    } else {
+      let file = File::create("accounts.jsonl").await?;
+      let mut file = file.into_std().await;
+
+      let data = self.accounts.iter().map(|(k, pass)| {
+        let uid = &*k;
+        let uid = uid.clone();
+
+        let pass = pass.as_ref().unwrap();
+        let pass = pass.clone();
+
+        (uid, pass)
+      });
+
+      for data in data {
+        serde_json::to_writer(&mut file, &data)?;
+
+        file.write(b"\n")?;
+        file.flush()?;
+      }
+
+      file.flush()?;
+    }
+
+    Ok(())
+  }
 }
 
 pub fn now() -> u64 {
@@ -120,16 +160,31 @@ pub fn gen_random_token() -> Returns<(String, Hashed)> {
   Ok((token, hashed))
 }
 
+pub async fn parse_session_token_async(token: &str) -> Returns<Vec<u8>> {
+  // SAFETY
+  // The callback is awaited eagerly and hence
+  // it will remain valid for the time spawn_blocking runs
+  let token: &'static str = unsafe { &*(token as *const str) };
+
+  spawn_blocking(move || parse_session_token(token)).await?
+}
+
 pub async fn gen_session_token_async() -> Returns<(String, Hashed)> {
   spawn_blocking(gen_session_token).await?
 }
 
 pub fn gen_session_token() -> Returns<(String, Hashed)> {
-  let token = VALUES
-    .choose_multiple(&mut rand::rng(), 64)
-    .collect::<String>();
+  let mut rng = rand::rng();
+
+  let token = vec![rng.random::<u8>(); 128];
+
+  let token = general_purpose::URL_SAFE_NO_PAD.encode(&token);
 
   let hashed = hash(&token, DEFAULT_COST)?;
 
   Ok((token, hashed))
+}
+
+pub fn parse_session_token(token: &str) -> Returns<Vec<u8>> {
+  Ok(general_purpose::URL_SAFE_NO_PAD.decode(token)?)
 }
