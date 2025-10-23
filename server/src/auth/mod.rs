@@ -10,108 +10,106 @@ use std::{
 use tokio::{fs::File, task::spawn_blocking};
 
 // Hashing Algorithm
-use bcrypt::{DEFAULT_COST, hash, verify};
+use bcrypt::{hash, verify};
 
-use crate::structs::{Authentication, Config, error::Returns};
+use crate::structs::{BCRYPT_COST, error::Returns};
 
-// TODO: Use these types
+const TOKEN_ID_LENGTH: usize = 12;
+
 #[allow(dead_code)]
 pub struct AuthSessionManager {
   sessions: Cache<Box<str>, Arc<Box<str>>>,
-  accounts: Cache<Box<str>, Option<Box<str>>>,
-  token: bool,
+  accounts: Cache<Box<str>, Arc<Box<str>>>,
 }
 
-pub type Account = (Box<str>, Box<str>);
+pub type AccountOrToken = (Box<str>, Box<str>);
 
 impl AuthSessionManager {
-  pub async fn create(config: &Config) -> Self {
+  pub async fn create() -> Self {
     let sessions = Cache::builder()
       .time_to_live(Duration::from_days(30))
       .build();
 
     let accounts = Cache::builder().build();
 
-    let token = matches!(config.authentication, Authentication::TokenBased);
-
-    if token {
-      if let Ok(x) = File::open("./tokens.jsonl").await {
-        let x = x.into_std().await;
-
-        let x = BufReader::new(x);
-
-        let list = Deserializer::from_reader(x)
-          .into_iter::<Box<str>>()
-          .map(|x| x.unwrap());
-
-        for token_hash in list {
-          accounts.insert(token_hash, None).await;
-        }
-      }
-    } else if let Ok(x) = File::open("./accounts.jsonl").await {
+    if let Ok(x) = File::open("./authdata.jsonl").await {
       let x = x.into_std().await;
 
       let x = BufReader::new(x);
 
       let list = Deserializer::from_reader(x)
-        .into_iter::<Account>()
+        .into_iter::<AccountOrToken>()
         .map(|x| x.unwrap());
 
-      for (userid, pwd_hash) in list {
-        accounts.insert(userid, Some(pwd_hash)).await;
+      for (id, pwd_hash) in list {
+        accounts.insert(id, Arc::new(pwd_hash)).await;
       }
     }
 
-    Self {
-      sessions,
-      accounts,
-      token,
+    Self { sessions, accounts }
+  }
+
+  pub async fn is_valid_token(&self, token: &str) -> Returns<Option<String>> {
+    let Some((tok_id, token)) = token.split_once(".") else {
+      return Ok(None);
+    };
+
+    self.is_valid_account(tok_id, token).await
+  }
+
+  pub async fn is_valid_account(&self, userid: &str, pass: &str) -> Returns<Option<String>> {
+    let Some(hash) = self.accounts.get(userid).await else {
+      return Ok(None);
+    };
+
+    if !verify_hash(pass, &hash).await? {
+      return Ok(None);
     }
+
+    let sess = gen_session_token_async().await?;
+    let sess_cloned = sess.clone();
+
+    let userid_owned = Arc::new(userid.to_owned().into_boxed_str());
+
+    self
+      .sessions
+      .insert(sess.into_boxed_str(), userid_owned)
+      .await;
+
+    Ok(Some(sess_cloned))
+  }
+
+  pub async fn verify_session(&self, token: &str) -> bool {
+    self
+      .sessions
+      .get(token)
+      .await
+      .map(|x| self.accounts.contains_key(&x as &str))
+      .is_some_and(|x| x)
   }
 
   pub async fn before_exit(&self) -> Returns<()> {
-    if self.token {
-      let file = File::create("tokens.jsonl").await?;
-      let mut file = file.into_std().await;
+    let file = File::create("authdata.jsonl").await?;
+    let mut file = file.into_std().await;
 
-      let data = self.accounts.iter().map(|(k, _)| {
-        let uid = &*k;
-        let uid = uid.clone();
+    let data = self.accounts.iter().map(|(k, pass)| {
+      let uid = &*k;
+      let uid = uid.clone();
 
-        (uid, None::<Box<str>>)
-      });
+      let pass = &*pass;
+      let pass = pass.clone();
 
-      for data in data {
-        serde_json::to_writer(&mut file, &data)?;
+      (uid, pass)
+    });
 
-        file.write(b"\n")?;
-        file.flush()?;
-      }
+    for data in data {
+      serde_json::to_writer(&mut file, &data)?;
 
-      file.flush()?;
-    } else {
-      let file = File::create("accounts.jsonl").await?;
-      let mut file = file.into_std().await;
-
-      let data = self.accounts.iter().map(|(k, pass)| {
-        let uid = &*k;
-        let uid = uid.clone();
-
-        let pass = pass.as_ref().unwrap();
-        let pass = pass.clone();
-
-        (uid, pass)
-      });
-
-      for data in data {
-        serde_json::to_writer(&mut file, &data)?;
-
-        file.write(b"\n")?;
-        file.flush()?;
-      }
-
+      file.write(b"\n")?;
       file.flush()?;
     }
+
+    file.flush()?;
 
     Ok(())
   }
@@ -129,7 +127,7 @@ pub async fn create_hash(pass: &str) -> Returns<String> {
   // Certify that this is safe
   let pass: &'static str = unsafe { &*(pass as *const str) };
 
-  Ok(spawn_blocking(move || hash(pass, DEFAULT_COST)).await??)
+  Ok(spawn_blocking(move || hash(pass, BCRYPT_COST)).await??)
 }
 
 pub async fn verify_hash(pass: &str, hash: &str) -> Returns<bool> {
@@ -148,43 +146,37 @@ pub const VALUES: [char; 64] = [
   '5', '6', '7', '8', '9', '+', '/',
 ];
 
-pub type Hashed = String;
+pub type Hashed = Box<str>;
 
-pub fn gen_random_token() -> Returns<(String, Hashed)> {
-  let token = VALUES
-    .choose_multiple(&mut rand::rng(), 128)
-    .collect::<String>();
+pub fn gen_random_token() -> Returns<(String, (Box<str>, Hashed))> {
+  let mut rng = rand::rng();
 
-  let hashed = hash(&token, DEFAULT_COST)?;
+  let token = VALUES.choose_multiple(&mut rng, 128).collect::<String>();
 
-  Ok((token, hashed))
+  let token_key = VALUES
+    .choose_multiple(&mut rng, TOKEN_ID_LENGTH)
+    .collect::<Box<str>>();
+
+  let hashed = hash(&token, BCRYPT_COST)?.into_boxed_str();
+
+  let token_to_output = format!("{token_key}.{token}");
+
+  Ok((token_to_output, (token_key, hashed)))
 }
 
-pub async fn parse_session_token_async(token: &str) -> Returns<Vec<u8>> {
-  // SAFETY
-  // The callback is awaited eagerly and hence
-  // it will remain valid for the time spawn_blocking runs
-  let token: &'static str = unsafe { &*(token as *const str) };
-
-  spawn_blocking(move || parse_session_token(token)).await?
-}
-
-pub async fn gen_session_token_async() -> Returns<(String, Hashed)> {
+pub async fn gen_session_token_async() -> Returns<String> {
   spawn_blocking(gen_session_token).await?
 }
 
-pub fn gen_session_token() -> Returns<(String, Hashed)> {
+// Server Token
+pub fn gen_session_token() -> Returns<String> {
   let mut rng = rand::rng();
 
-  let token = vec![rng.random::<u8>(); 128];
+  let mut token = vec![0u8; 96];
+
+  rng.fill(&mut token as &mut [u8]);
 
   let token = general_purpose::URL_SAFE_NO_PAD.encode(&token);
 
-  let hashed = hash(&token, DEFAULT_COST)?;
-
-  Ok((token, hashed))
-}
-
-pub fn parse_session_token(token: &str) -> Returns<Vec<u8>> {
-  Ok(general_purpose::URL_SAFE_NO_PAD.decode(token)?)
+  Ok(token)
 }

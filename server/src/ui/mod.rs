@@ -17,7 +17,7 @@ use cursive_tabs::TabPanel;
 use serde_json::to_string_pretty;
 use tokio::runtime::{Builder, Runtime};
 
-use crate::structs::{Authentication, Config};
+use crate::structs::{Authentication, BCRYPT_COST, Config};
 
 mod auth;
 mod bind;
@@ -32,7 +32,7 @@ pub static ASYNC: LazyLock<Runtime> = LazyLock::new(|| {
     .expect("Unable to build async runtime")
 });
 
-use bcrypt::{DEFAULT_COST, hash};
+use bcrypt::hash;
 
 fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
   l.add_child(
@@ -85,7 +85,7 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
               .child(EditView::new().secret().on_submit(|x, txt| {
                 let c_: &mut Ptr<Config> = x.user_data().unwrap();
 
-                c_.admin_pass_hash = Some(hash(txt, DEFAULT_COST).expect("Unknown error"));
+                c_.admin_pass_hash = Some(hash(txt, BCRYPT_COST).expect("Unknown error"));
 
                 x.pop_layer();
               }))

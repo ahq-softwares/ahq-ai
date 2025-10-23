@@ -1,22 +1,14 @@
 {
   "binds": [
-    [
-      "0.0.0.0",
-      3124
-    ],
-    [
-      "localhost",
-      3124
-    ]
+    ["0.0.0.0", 3124],
+    ["localhost", 3124]
   ],
-  "admin_pass_hash": "$2b$12$pGrV7yz.7J5aLfzPsrqbGOQgKRAF0.uVCQnJ9uItEImMYUhiHmrAy",
+  "admin_pass_hash": "$2b$14$1tCcHxc7haJJDGi2IObejOC3CUxf5Pk/A8rPlH8DjzOD1h.HF.4Hi",
   "ollama": {
     "host": "http://127.0.0.1",
-    "port": 3000,
+    "port": 11434,
     "cvmodels": [],
-    "txtmodels": [
-      "gemma3:273m"
-    ]
+    "txtmodels": ["gemma3:270m"]
   },
   "authentication": {
     "kind": "Account",

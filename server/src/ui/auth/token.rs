@@ -30,6 +30,6 @@ pub fn render(l: &mut LinearLayout) {
   );
 
   l.add_child(
-    TextView::new("This means that the application would be required to supply a token for the purposes of verification. The token will be verified and finally then the application can interact with the server. This is comparatively more secure but can also be a bit tedious")
+    TextView::new("This means that the application would be required to supply a token for the purposes of verification. The token will be verified and finally then the application can interact with the server. This is as fast as Account Verification.")
   );
 }

@@ -4,7 +4,7 @@ use std::{
   thread::available_parallelism,
 };
 
-use actix_web::{App, HttpServer};
+use actix_web::{App, HttpServer, web};
 use chalk_rs::Chalk;
 use ollama_rs::Ollama;
 use serde_json::from_str;
@@ -15,6 +15,7 @@ use crate::{
 };
 
 pub mod auth;
+pub mod chat;
 pub mod http;
 
 pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
@@ -51,7 +52,7 @@ pub async fn main() -> std::io::Result<()> {
   let auth = !matches!(CONFIG.authentication, Authentication::OpenToAll);
 
   if auth {
-    _ = AUTH.set(AuthSessionManager::create(&CONFIG).await);
+    _ = AUTH.set(AuthSessionManager::create().await);
   }
 
   if OLLAMA.list_local_models().await.is_err() {
@@ -63,7 +64,10 @@ pub async fn main() -> std::io::Result<()> {
   }
 
   let mut server = HttpServer::new(|| {
-    let mut app = App::new().service(http::index);
+    let mut app = App::new()
+      .service(http::index)
+      .route("/chat", web::get().to(chat::chat));
+
     let auth = !matches!(CONFIG.authentication, Authentication::OpenToAll);
 
     if auth {

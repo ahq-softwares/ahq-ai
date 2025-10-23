@@ -45,12 +45,12 @@ fn add_model(cv: bool) -> Dialog {
         &mut data.ollama.txtmodels
       };
 
-      state_.push(model.to_string().into_boxed_str());
+      state_.insert(model.to_string().into_boxed_str());
 
       let state = state_.clone();
 
       x.call_on_name("models", |l: &mut LinearLayout| {
-        iterate_layout(l, &state, cv);
+        iterate_layout(l, state.iter(), cv);
       });
 
       x.pop_layer();
@@ -69,9 +69,9 @@ fn gen_cnt(s: Ptr<Config>, cv: bool) -> NamedView<LinearLayout> {
   iterate_layout(
     &mut layout,
     if cv {
-      &s.ollama.cvmodels
+      s.ollama.cvmodels.iter()
     } else {
-      &s.ollama.txtmodels
+      s.ollama.txtmodels.iter()
     },
     cv,
   );
@@ -79,8 +79,13 @@ fn gen_cnt(s: Ptr<Config>, cv: bool) -> NamedView<LinearLayout> {
   layout.with_name("models")
 }
 
-fn iterate_layout(l: &mut LinearLayout, binds: &[Box<str>], cv: bool) {
+fn iterate_layout<'a, T>(l: &mut LinearLayout, binds: T, cv: bool)
+where
+  T: Iterator<Item = &'a Box<str>>,
+{
   l.clear();
+
+  let binds = binds.collect::<Vec<_>>();
 
   if binds.is_empty() {
     l.add_child(TextView::new("No models detected"));
@@ -111,6 +116,8 @@ fn iterate_layout(l: &mut LinearLayout, binds: &[Box<str>], cv: bool) {
 }
 
 fn layout_child(index: usize, model: &str, cv: bool) -> LinearLayout {
+  let index_str = model.to_owned();
+
   LinearLayout::horizontal()
     .child(
       TextView::new(format!("{}.", index + 1))
@@ -122,9 +129,9 @@ fn layout_child(index: usize, model: &str, cv: bool) -> LinearLayout {
       Button::new_raw("✕ Remove", move |x| {
         x.with_user_data(|x: &mut Ptr<Config>| {
           if cv {
-            x.ollama.cvmodels.remove(index);
+            x.ollama.cvmodels.remove(&index_str as &str);
           } else {
-            x.ollama.txtmodels.remove(index);
+            x.ollama.txtmodels.remove(&index_str as &str);
           }
         });
 
@@ -137,7 +144,7 @@ fn layout_child(index: usize, model: &str, cv: bool) -> LinearLayout {
         .clone();
 
         x.call_on_name("models", |l: &mut LinearLayout| {
-          iterate_layout(l, &state, cv);
+          iterate_layout(l, state.iter(), cv);
         });
       })
       .fixed_width(12),

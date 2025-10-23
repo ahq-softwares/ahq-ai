@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string_pretty};
 use tokio::fs;
@@ -15,6 +17,8 @@ pub struct Config {
   pub authentication: Authentication,
 }
 
+pub static BCRYPT_COST: u32 = 14;
+
 fn def_bind() -> Vec<(String, u16)> {
   vec![
     ("0.0.0.0".to_string(), 3000),
@@ -26,8 +30,8 @@ fn def_bind() -> Vec<(String, u16)> {
 pub struct OllamaConfiguration {
   pub host: Box<str>,
   pub port: u16,
-  pub cvmodels: Vec<Box<str>>,
-  pub txtmodels: Vec<Box<str>>,
+  pub cvmodels: HashSet<Box<str>>,
+  pub txtmodels: HashSet<Box<str>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

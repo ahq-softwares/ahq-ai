@@ -1079,7 +1079,7 @@ mod ui {
             .build()
             .expect("Unable to build async runtime")
     });
-    use bcrypt::{DEFAULT_COST, hash};
+    use bcrypt::{BCRYPT_COST, hash};
     fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
         l.add_child(
             TextView::new("Welcome to AHQ-AI Server Configuration")
@@ -1133,7 +1133,7 @@ mod ui {
                                                     .on_submit(|x, txt| {
                                                         let c_: &mut Ptr<Config> = x.user_data().unwrap();
                                                         c_.admin_pass_hash = Some(
-                                                            hash(txt, DEFAULT_COST).expect("Unknown error"),
+                                                            hash(txt, BCRYPT_COST).expect("Unknown error"),
                                                         );
                                                         x.pop_layer();
                                                     }),
@@ -1472,7 +1472,7 @@ pub mod auth {
     use std::{io::BufReader, sync::Arc, time::{Duration, SystemTime, UNIX_EPOCH}};
     use base64::{engine::general_purpose, Engine as _};
     use tokio::{fs::File, task::spawn_blocking};
-    use bcrypt::{DEFAULT_COST, hash, verify};
+    use bcrypt::{BCRYPT_COST, hash, verify};
     use crate::structs::{Authentication, Config, error::Returns};
     #[allow(dead_code)]
     pub struct AuthSessionManager {
@@ -1524,7 +1524,7 @@ pub mod auth {
     }
     pub async fn create_hash(pass: &str) -> Returns<String> {
         let pass: &'static str = unsafe { &*(pass as *const str) };
-        Ok(spawn_blocking(move || hash(pass, DEFAULT_COST)).await??)
+        Ok(spawn_blocking(move || hash(pass, BCRYPT_COST)).await??)
     }
     pub async fn verify_hash(pass: &str, hash: &str) -> Returns<bool> {
         let hash: &'static str = unsafe { &*(hash as *const str) };
@@ -1540,7 +1540,7 @@ pub mod auth {
     pub type Hashed = String;
     pub fn gen_random_token() -> Returns<(String, Hashed)> {
         let token = VALUES.choose_multiple(&mut rand::rng(), 128).collect::<String>();
-        let hashed = hash(&token, DEFAULT_COST)?;
+        let hashed = hash(&token, BCRYPT_COST)?;
         Ok((token, hashed))
     }
     pub async fn parse_session_token_async(token: &str) -> Returns<Vec<u8>> {
@@ -1554,7 +1554,7 @@ pub mod auth {
         let mut rng = rand::rng();
         let token = ::alloc::vec::from_elem(rng.random::<u8>(), 128);
         let token = general_purpose::URL_SAFE_NO_PAD.encode(&token);
-        let hashed = hash(&token, DEFAULT_COST)?;
+        let hashed = hash(&token, BCRYPT_COST)?;
         Ok((token, hashed))
     }
     pub fn parse_session_token(token: &str) -> Returns<Vec<u8>> {
