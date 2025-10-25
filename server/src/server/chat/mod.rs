@@ -1,6 +1,5 @@
 use crate::server::{
-  AUTH, CONFIG, OLLAMA,
-  chat::ollama::{Message, OllamaMsgResp, OllamaRequest},
+  AUTH, CONFIG, HISTORY_LENGTH, OLLAMA, chat::ollama::{Message, OllamaMsgResp, OllamaRequest}
 };
 use actix_web::{HttpRequest, HttpResponse, Result, rt, web::Payload};
 use actix_ws::{AggregatedMessage, Session};
@@ -63,8 +62,8 @@ pub async fn chat(req: HttpRequest, stream: Payload) -> Result<HttpResponse> {
     let img_capable = img_capable;
     let mut init = false;
 
-    // Max 40 messages
-    let mut history = Vec::with_capacity(40);
+    // Max HISTORY_LENGTH messages
+    let mut history = Vec::with_capacity(*HISTORY_LENGTH);
 
     while let Some(msg) = stream.recv().await {
       match msg {
@@ -163,14 +162,14 @@ async fn handle_msg_faillable(
         return Some(model);
       }
 
-      if hist.len() > 40 {
+      if hist.len() > *HISTORY_LENGTH {
         if using_json {
           _ = session
-            .text(r#"{ "msg": "History cannot be more than 40 messages" }"#)
+            .text(r#"{ "msg": "Max History length reached" }"#)
             .await;
         } else {
           _ = session
-            .text(r#"{ "msg": "History cannot be more than 40 messages" }"#)
+            .text(r#"{ "msg": "Max History length reached" }"#)
             .await;
         }
 
@@ -182,19 +181,29 @@ async fn handle_msg_faillable(
         hist
           .into_iter()
           .map(|x| {
-            let (role, content) = match x {
-              Message::User { message } => (MessageRole::User, message),
-              Message::Assistant { message } => (MessageRole::Assistant, message)
-            };
+            match x {
+              Message::User { message, images } => {
+                let mut msg = ChatMessage::new(MessageRole::User, message);
+                
+                if let Some(images) = images {
+                  msg = msg.with_images(
+                    images.into_iter()
+                      .map(|x| Image::from_base64(x))
+                      .collect::<Vec<_>>()
+                  )
+                }
 
-            ChatMessage::new(role, content)
+                msg
+              },
+              Message::Assistant { message } => ChatMessage::new(MessageRole::Assistant, message)
+            }
           }),
       );
 
       return Some(model);
     }
     OllamaRequest::ChatCompletion { prompt, images } => {
-      if history.len() > 40 {
+      if history.len() > *HISTORY_LENGTH {
         if using_json {
           _ = session
             .text(r#"{ "msg": "Maximum message length reached!" }"#)
