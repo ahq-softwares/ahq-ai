@@ -30,6 +30,7 @@ fn def_bind() -> Vec<(String, u16)> {
 pub struct OllamaConfiguration {
   pub host: Box<str>,
   pub port: u16,
+  pub msgs: usize,
   pub cvmodels: HashSet<Box<str>>,
   pub txtmodels: HashSet<Box<str>>,
 }

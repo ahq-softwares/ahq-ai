@@ -5,7 +5,7 @@ pub type History = Vec<Message>;
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "event")]
 pub enum Message {
-  User { message: String, images: Option<Vec<String>>, },
+  User { message: String, images: Option<Vec<String>> },
   Assistant { message: String }
 }
 

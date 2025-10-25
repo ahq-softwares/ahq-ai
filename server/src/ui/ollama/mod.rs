@@ -16,6 +16,12 @@ pub fn ollama_page(s: Ptr<Config>) -> NamedView<ScrollView<LinearLayout>> {
 
   layout.add_child(DummyView::new().fixed_height(1));
 
+  layout.add_child(TextView::new("Chat").style(Style::merge(&[Effect::Underline.into()])));
+
+  layout.add_child(msgs(s.clone()));
+
+  layout.add_child(DummyView::new().fixed_height(1));
+
   layout.add_child(TextView::new("Models").style(Style::merge(&[Effect::Underline.into()])));
 
   let s1 = s.clone();
@@ -67,6 +73,36 @@ fn server(s: Ptr<Config>) -> LinearLayout {
       .with_name("ollama_hostname"),
     )
 }
+
+fn msgs(s: Ptr<Config>) -> LinearLayout {
+  LinearLayout::horizontal()
+    .child(TextView::new("🖥 Max message pair per chat").full_width())
+    .child(
+      Button::new_raw(format!("<{}>", &s.ollama.msgs), |x| {
+        x.add_layer(
+          Dialog::around(
+            EditView::new()
+              .on_edit(|x, txt, _| {
+                let data: &mut Ptr<Config> = x.user_data().unwrap();
+
+                if let Ok(num) = txt.parse::<usize>() {
+                  data.ollama.msgs = num;
+
+                  x.call_on_name("ollama_msgs", |x: &mut Button| {
+                    x.set_label_raw(format!("<{num}>"));
+                  });
+                }
+              })
+              .on_submit(|x, _| _ = x.pop_layer()),
+          )
+          .dismiss_button("Close")
+          .title("Enter Maximum"),
+        );
+      })
+      .with_name("ollama_msgs"),
+    )
+}
+
 
 fn port(s: Ptr<Config>) -> LinearLayout {
   LinearLayout::horizontal()

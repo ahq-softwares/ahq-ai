@@ -24,7 +24,7 @@ pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
   from_str(&data).expect("Invalid configuration file, unable to parse")
 });
 
-pub static HISTORY_LENGTH: LazyLock<usize> = LazyLock::new(|| 160);
+pub static HISTORY_LENGTH: LazyLock<usize> = LazyLock::new(|| CONFIG.ollama.msgs.checked_mul(2).unwrap_or(usize::MAX));
 
 pub static TOKEN: LazyLock<bool> =
   LazyLock::new(|| matches!(CONFIG.authentication, Authentication::TokenBased));
