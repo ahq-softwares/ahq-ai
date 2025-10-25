@@ -36,10 +36,10 @@ pub async fn auth(payload: Bytes) -> Result<impl Responder> {
   // If invalid close all
   // This is a cancel thread
   let resp = match *TOKEN {
-    true => auth_ref.is_valid_token(&auth.pass).await?,
+    true => auth_ref.is_valid_token(auth.pass).await?,
     false => {
       auth_ref
-        .is_valid_account(&auth.username.unwrap_or_default(), &auth.pass)
+        .is_valid_account(auth.username.unwrap_or_default(), auth.pass)
         .await?
     }
   };
@@ -73,9 +73,15 @@ pub async fn register(payload: Bytes) -> Result<impl Responder> {
   }
 
   match auth_ref.register(regn.username, regn.pass).await? {
-    AccountCreateOutcome::InternalServerError => Ok(HttpResponse::InternalServerError().body(r#"{ "msg": "Internal Server Error" }"#)),
+    AccountCreateOutcome::InternalServerError => {
+      Ok(HttpResponse::InternalServerError().body(r#"{ "msg": "Internal Server Error" }"#))
+    }
     AccountCreateOutcome::Successful => Ok(HttpResponse::NoContent().body(vec![])),
-    AccountCreateOutcome::UsernameExists => Ok(HttpResponse::Conflict().body(r#"{ "msg": "User already exists" }"#)),
-    AccountCreateOutcome::WeakPassword => Ok(HttpResponse::BadRequest().body(r#"{ "msg": "Insecure Password" }"#))
+    AccountCreateOutcome::UsernameExists => {
+      Ok(HttpResponse::Conflict().body(r#"{ "msg": "User already exists" }"#))
+    }
+    AccountCreateOutcome::WeakPassword => {
+      Ok(HttpResponse::BadRequest().body(r#"{ "msg": "Insecure Password" }"#))
+    }
   }
 }

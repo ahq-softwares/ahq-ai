@@ -24,18 +24,14 @@ pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
   from_str(&data).expect("Invalid configuration file, unable to parse")
 });
 
-pub static HISTORY_LENGTH: LazyLock<usize> =
-  LazyLock::new(|| CONFIG.ollama.msgs.checked_mul(2).unwrap_or(usize::MAX));
+pub static HISTORY_LENGTH: LazyLock<usize> = LazyLock::new(|| CONFIG.ollama.msgs.saturating_mul(2));
 
 pub static MAX_ACCOUNTS: LazyLock<u64> = LazyLock::new(|| {
   let Authentication::Account { max_users, .. } = &CONFIG.authentication else {
     return u64::MAX;
   };
 
-  max_users
-    .as_ref()
-    .and_then(|x| Some(*x))
-    .unwrap_or(u64::MAX)
+  max_users.as_ref().map(|x| *x).unwrap_or(u64::MAX)
 });
 
 pub static TOKEN: LazyLock<bool> =
@@ -98,6 +94,7 @@ pub async fn main() -> std::io::Result<()> {
     }
 
     if registration_api {
+      app = app.service(auth::register);
       // TODO: Registration stuff
     }
 

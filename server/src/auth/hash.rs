@@ -52,7 +52,7 @@ impl HashingAgent {
   ///
   /// # Returns
   /// This function returns None in case of the server's queue being maxed out
-  pub async fn verify_pass<'a>(&self, pass: &'a str, hash: &'a str) -> Option<bool> {
+  pub async fn verify_pass(&self, pass: &str, hash: &str) -> Option<bool> {
     if self.0.is_full() {
       return None;
     }
@@ -72,7 +72,7 @@ impl HashingAgent {
 
   /// # Returns
   /// This function returns None in case of the server's queue being maxed out
-  pub async fn gen_hash<'a>(&self, pass: &'a str) -> Option<String> {
+  pub async fn gen_hash(&self, pass: &str) -> Option<String> {
     if self.0.is_full() {
       return None;
     }
@@ -84,5 +84,11 @@ impl HashingAgent {
     self.0.try_send(HashResp::GenHash { pass, tx }).ok()?;
 
     rx.await.ok()?
+  }
+}
+
+impl Default for HashingAgent {
+  fn default() -> Self {
+    Self::new()
   }
 }

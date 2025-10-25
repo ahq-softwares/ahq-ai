@@ -29,18 +29,18 @@ pub async fn chat(req: HttpRequest, stream: Payload) -> Result<HttpResponse> {
     return Ok(HttpResponse::Unauthorized().body("{\"msg\": \"Invalid `session` header\"}"));
   };
 
-  if let Some(auth) = AUTH.get() {
-    if !auth.verify_session(session).await {
-      return Ok(HttpResponse::Unauthorized().body("{\"msg\": \"Invalid SessionToken\"}"));
-    }
+  if let Some(auth) = AUTH.get()
+    && !auth.verify_session(session).await
+  {
+    return Ok(HttpResponse::Unauthorized().body("{\"msg\": \"Invalid SessionToken\"}"));
   }
 
   // Checks if the Model is capable of handling images
   let img_capable;
 
-  if CONFIG.ollama.cvmodels.contains(&model as &str) {
+  if CONFIG.ollama.cvmodels.contains(model) {
     img_capable = true;
-  } else if CONFIG.ollama.txtmodels.contains(&model as &str) {
+  } else if CONFIG.ollama.txtmodels.contains(model) {
     img_capable = false;
   } else {
     return Ok(HttpResponse::NotFound().body("{\"msg\": \"Model not found!\"}"));
@@ -134,7 +134,9 @@ async fn handle_msg(
       if using_json {
         _ = session.text(r#"{ "msg": "Internal Server Error" }"#).await;
       } else {
-        _ = session.text(r#"{ "msg": "Internal Server Error" }"#).await;
+        _ = session
+          .text(r#"{ "msg": "Internal Server Error TODO: BSON" }"#)
+          .await;
       }
 
       String::with_capacity(0)
@@ -157,7 +159,9 @@ async fn handle_msg_faillable(
         if using_json {
           _ = session.text(r#"{ "msg": "Already initialized" }"#).await;
         } else {
-          _ = session.text(r#"{ "msg": "Already initialized" }"#).await;
+          _ = session
+            .text(r#"{ "msg": "Already initialized TODO: BSON" }"#)
+            .await;
         }
 
         return Some(model);
@@ -170,7 +174,7 @@ async fn handle_msg_faillable(
             .await;
         } else {
           _ = session
-            .text(r#"{ "msg": "Max History length reached" }"#)
+            .text(r#"{ "msg": "Max History length reached TODO: BSON" }"#)
             .await;
         }
 
@@ -186,7 +190,7 @@ async fn handle_msg_faillable(
             msg = msg.with_images(
               images
                 .into_iter()
-                .map(|x| Image::from_base64(x))
+                .map(Image::from_base64)
                 .collect::<Vec<_>>(),
             )
           }
@@ -203,7 +207,7 @@ async fn handle_msg_faillable(
         }
       }));
 
-      return Some(model);
+      Some(model)
     }
     OllamaRequest::ChatCompletion { prompt, images } => {
       if history.len() > *HISTORY_LENGTH {
@@ -213,7 +217,7 @@ async fn handle_msg_faillable(
             .await;
         } else {
           _ = session
-            .text(r#"{ "msg": "Maximum message length reached!" }"#)
+            .text(r#"{ "msg": "Maximum message length reached TODO: BSON!" }"#)
             .await;
         }
         return None;
@@ -229,7 +233,7 @@ async fn handle_msg_faillable(
               .await;
           } else {
             _ = session
-              .text(r#"{ "msg": "The model is not image capable" }"#)
+              .text(r#"{ "msg": "The model is not image capable (TODO: BSON)" }"#)
               .await;
           }
           return None;
@@ -238,7 +242,7 @@ async fn handle_msg_faillable(
         message = message.with_images(
           images
             .into_iter()
-            .map(|x| Image::from_base64(x))
+            .map(Image::from_base64)
             .collect::<Vec<_>>(),
         );
       }

@@ -21,6 +21,7 @@ const TOKEN_ID_LENGTH: usize = 12;
 
 #[allow(dead_code)]
 pub struct AuthSessionManager {
+  // UserID -> session token
   sessions: Cache<Box<str>, Arc<Box<str>>>,
   accounts: Cache<Box<str>, Arc<Box<str>>>,
   agent: HashingAgent,
@@ -91,7 +92,10 @@ impl AuthSessionManager {
 
     self
       .accounts
-      .insert(user.to_owned().into_boxed_str(), Arc::new(pwd_hash.into_boxed_str()))
+      .insert(
+        user.to_owned().into_boxed_str(),
+        Arc::new(pwd_hash.into_boxed_str()),
+      )
       .await;
 
     Ok(AccountCreateOutcome::Successful)
@@ -118,25 +122,33 @@ impl AuthSessionManager {
       return Ok(AccountCheckOutcome::InvalidPassword);
     }
 
-    let sess = gen_session_token()?;
-    let sess_cloned = sess.clone();
+    if let Some(session) = self.sessions.get(userid).await {
+      let sess_cloned = format!("{userid}.{session}");
 
-    let userid_owned = Arc::new(userid.to_owned().into_boxed_str());
+      return Ok(AccountCheckOutcome::Some(sess_cloned));
+    }
+
+    let sess = gen_session_token()?;
+    let sess_cloned = format!("{userid}.{sess}");
 
     self
       .sessions
-      .insert(sess.into_boxed_str(), userid_owned)
+      .insert(userid.to_owned().into_boxed_str(), Arc::new(sess.into_boxed_str()))
       .await;
 
     Ok(AccountCheckOutcome::Some(sess_cloned))
   }
 
   pub async fn verify_session(&self, token: &str) -> bool {
+    let Some((userid, session)) = token.split_once(".") else {
+      return false;
+    };
+
     self
       .sessions
-      .get(token)
+      .get(userid)
       .await
-      .map(|x| self.accounts.contains_key(&x as &str))
+      .map(|x| session == (&x as &str))
       .is_some_and(|x| x)
   }
 
@@ -157,7 +169,7 @@ impl AuthSessionManager {
     for data in data {
       serde_json::to_writer(&mut file, &data)?;
 
-      file.write(b"\n")?;
+      file.write_all(b"\n")?;
       file.flush()?;
     }
 
