@@ -1,4 +1,5 @@
 use base64::{Engine as _, engine::general_purpose};
+use bcrypt::hash;
 use moka::future::Cache;
 use rand::{Rng, seq::IndexedRandom};
 use serde_json::Deserializer;
@@ -8,11 +9,9 @@ use std::{
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::{fs::File, task::spawn_blocking};
+use crate::{auth::hash::HashingAgent, structs::{BCRYPT_COST, error::Returns}};
 
-// Hashing Algorithm
-use bcrypt::{hash, verify};
-
-use crate::structs::{BCRYPT_COST, error::Returns};
+pub mod hash;
 
 const TOKEN_ID_LENGTH: usize = 12;
 
@@ -20,6 +19,14 @@ const TOKEN_ID_LENGTH: usize = 12;
 pub struct AuthSessionManager {
   sessions: Cache<Box<str>, Arc<Box<str>>>,
   accounts: Cache<Box<str>, Arc<Box<str>>>,
+  agent: HashingAgent
+}
+
+pub enum AccountCheckOutcome {
+  NotFound,
+  TooManyRequests,
+  InvalidPassword,
+  Some(String)
 }
 
 pub type AccountOrToken = (Box<str>, Box<str>);
@@ -46,24 +53,28 @@ impl AuthSessionManager {
       }
     }
 
-    Self { sessions, accounts }
+    Self { sessions, accounts,agent: HashingAgent::new() }
   }
 
-  pub async fn is_valid_token(&self, token: &str) -> Returns<Option<String>> {
+  pub async fn is_valid_token(&self, token: &str) -> Returns<AccountCheckOutcome> {
     let Some((tok_id, token)) = token.split_once(".") else {
-      return Ok(None);
+      return Ok(AccountCheckOutcome::NotFound);
     };
 
     self.is_valid_account(tok_id, token).await
   }
 
-  pub async fn is_valid_account(&self, userid: &str, pass: &str) -> Returns<Option<String>> {
+  pub async fn is_valid_account(&self, userid: &str, pass: &str) -> Returns<AccountCheckOutcome> {
     let Some(hash) = self.accounts.get(userid).await else {
-      return Ok(None);
+      return Ok(AccountCheckOutcome::NotFound);
     };
 
-    if !verify_hash(pass, &hash).await? {
-      return Ok(None);
+    let Some(x) = self.agent.verify_pass(pass, &hash).await else {
+      return Ok(AccountCheckOutcome::TooManyRequests);
+    };
+
+    if !x {
+      return Ok(AccountCheckOutcome::InvalidPassword);
     }
 
     let sess = gen_session_token_async().await?;
@@ -76,7 +87,7 @@ impl AuthSessionManager {
       .insert(sess.into_boxed_str(), userid_owned)
       .await;
 
-    Ok(Some(sess_cloned))
+    Ok(AccountCheckOutcome::Some(sess_cloned))
   }
 
   pub async fn verify_session(&self, token: &str) -> bool {
@@ -122,23 +133,6 @@ pub fn now() -> u64 {
     .as_secs()
 }
 
-pub async fn create_hash(pass: &str) -> Returns<String> {
-  // I, the developer
-  // Certify that this is safe
-  let pass: &'static str = unsafe { &*(pass as *const str) };
-
-  Ok(spawn_blocking(move || hash(pass, BCRYPT_COST)).await??)
-}
-
-pub async fn verify_hash(pass: &str, hash: &str) -> Returns<bool> {
-  // I, the developer
-  // Certify that this is safe
-  let hash: &'static str = unsafe { &*(hash as *const str) };
-  let pass: &'static str = unsafe { &*(pass as *const str) };
-
-  Ok(spawn_blocking(move || verify(pass, hash)).await??)
-}
-
 pub const VALUES: [char; 64] = [
   'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's',
   't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
@@ -148,7 +142,7 @@ pub const VALUES: [char; 64] = [
 
 pub type Hashed = Box<str>;
 
-pub fn gen_random_token() -> Returns<(String, (Box<str>, Hashed))> {
+pub fn gen_auth_token() -> Returns<(String, (Box<str>, Hashed))> {
   let mut rng = rand::rng();
 
   let token = VALUES.choose_multiple(&mut rng, 128).collect::<String>();

@@ -238,6 +238,7 @@ dependencies = [
  "bcrypt",
  "chalk_rs",
  "ciborium",
+ "crossbeam-channel",
  "cursive",
  "cursive-tabs",
  "moka",

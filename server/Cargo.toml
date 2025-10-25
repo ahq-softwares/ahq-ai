@@ -27,6 +27,7 @@ async-recursion = "^1"
 tokio = { version = "^1", features = ["fs", "sync", "rt"] }
 thiserror = "^2"
 chalk_rs = "^1"
+crossbeam-channel = "0.5.15"
 
 [profile.release]
 strip = true

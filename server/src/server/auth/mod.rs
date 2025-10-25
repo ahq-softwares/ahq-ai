@@ -1,7 +1,7 @@
 use actix_web::{HttpResponse, Responder, Result, post, web::Bytes};
 use serde::Deserialize;
 
-use crate::server::{AUTH, TOKEN};
+use crate::{auth::AccountCheckOutcome, server::{AUTH, TOKEN}};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -30,9 +30,10 @@ pub async fn auth(payload: Bytes) -> Result<impl Responder> {
     }
   };
 
-  let Some(resp) = resp else {
-    return Ok(HttpResponse::Unauthorized().body("{\"msg\": \"Invalid credentials\"}"));
-  };
-
-  Ok(HttpResponse::Ok().body(resp))
+  match resp {
+    AccountCheckOutcome::Some(x) => Ok(HttpResponse::Ok().body(x)),
+    AccountCheckOutcome::InvalidPassword => Ok(HttpResponse::Unauthorized().body("{\"msg\": \"Invalid Password\"}")),
+    AccountCheckOutcome::NotFound => Ok(HttpResponse::Unauthorized().body("{\"msg\": \"Not found\"}")),
+    AccountCheckOutcome::TooManyRequests => Ok(HttpResponse::TooManyRequests().body("{\"msg\": \"Too Many Requests\"}"))
+  }
 }
