@@ -77,7 +77,7 @@ impl AuthSessionManager {
       return Ok(AccountCheckOutcome::InvalidPassword);
     }
 
-    let sess = gen_session_token_async().await?;
+    let sess = gen_session_token()?;
     let sess_cloned = sess.clone();
 
     let userid_owned = Arc::new(userid.to_owned().into_boxed_str());
