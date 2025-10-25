@@ -3,10 +3,11 @@ use serde::{Deserialize, Serialize};
 pub type History = Vec<Message>;
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "event")]
+#[serde(tag = "user")]
 pub enum Message {
   User { message: String, images: Option<Vec<String>> },
-  Assistant { message: String }
+  System { prompt: String },
+  Assistant { message: String, thinking: Option<String> }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

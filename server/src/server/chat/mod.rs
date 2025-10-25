@@ -195,7 +195,14 @@ async fn handle_msg_faillable(
 
                 msg
               },
-              Message::Assistant { message } => ChatMessage::new(MessageRole::Assistant, message)
+              Message::System { prompt } => ChatMessage::new(MessageRole::System, prompt),
+              Message::Assistant { message, thinking } => {
+                let mut msg = ChatMessage::new(MessageRole::Assistant, message);
+
+                msg.thinking = thinking;
+
+                msg
+              }
             }
           }),
       );
