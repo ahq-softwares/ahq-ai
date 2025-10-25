@@ -48,8 +48,6 @@ pub async fn chat(req: HttpRequest, stream: Payload) -> Result<HttpResponse> {
 
   let model = model.to_owned();
 
-  println!("Capable of handling images: {img_capable}");
-
   let (res, mut session, stream) = actix_ws::handle(&req, stream)?;
 
   let mut stream = stream
