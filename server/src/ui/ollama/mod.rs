@@ -103,7 +103,6 @@ fn msgs(s: Ptr<Config>) -> LinearLayout {
     )
 }
 
-
 fn port(s: Ptr<Config>) -> LinearLayout {
   LinearLayout::horizontal()
     .child(TextView::new("🕸 Ollama Server Port").full_width())

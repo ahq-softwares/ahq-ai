@@ -1,3 +1,8 @@
+use crate::{
+  auth::hash::HashingAgent,
+  server::MAX_ACCOUNTS,
+  structs::{BCRYPT_COST, error::Returns},
+};
 use base64::{Engine as _, engine::general_purpose};
 use bcrypt::hash;
 use moka::future::Cache;
@@ -9,7 +14,6 @@ use std::{
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::{fs::File, task::spawn_blocking};
-use crate::{auth::hash::HashingAgent, structs::{BCRYPT_COST, error::Returns}};
 
 pub mod hash;
 
@@ -19,14 +23,21 @@ const TOKEN_ID_LENGTH: usize = 12;
 pub struct AuthSessionManager {
   sessions: Cache<Box<str>, Arc<Box<str>>>,
   accounts: Cache<Box<str>, Arc<Box<str>>>,
-  agent: HashingAgent
+  agent: HashingAgent,
+}
+
+pub enum AccountCreateOutcome {
+  UsernameExists,
+  WeakPassword,
+  InternalServerError,
+  Successful,
 }
 
 pub enum AccountCheckOutcome {
   NotFound,
   TooManyRequests,
   InvalidPassword,
-  Some(String)
+  Some(String),
 }
 
 pub type AccountOrToken = (Box<str>, Box<str>);
@@ -53,7 +64,37 @@ impl AuthSessionManager {
       }
     }
 
-    Self { sessions, accounts,agent: HashingAgent::new() }
+    Self {
+      sessions,
+      accounts,
+      agent: HashingAgent::new(),
+    }
+  }
+
+  pub async fn can_register(&self) -> bool {
+    self.accounts.entry_count() < *MAX_ACCOUNTS
+  }
+
+  pub async fn register(&self, user: &str, pass: &str) -> Returns<AccountCreateOutcome> {
+    self.accounts.run_pending_tasks().await;
+    if self.accounts.contains_key(user) {
+      return Ok(AccountCreateOutcome::UsernameExists);
+    }
+
+    if !is_strong_password(pass).await {
+      return Ok(AccountCreateOutcome::WeakPassword);
+    }
+
+    let Some(pwd_hash) = self.agent.gen_hash(pass).await else {
+      return Ok(AccountCreateOutcome::InternalServerError);
+    };
+
+    self
+      .accounts
+      .insert(user.to_owned().into_boxed_str(), Arc::new(pwd_hash.into_boxed_str()))
+      .await;
+
+    Ok(AccountCreateOutcome::Successful)
   }
 
   pub async fn is_valid_token(&self, token: &str) -> Returns<AccountCheckOutcome> {
@@ -131,6 +172,37 @@ pub fn now() -> u64 {
     .duration_since(UNIX_EPOCH)
     .unwrap()
     .as_secs()
+}
+
+pub async fn is_strong_password(password: &str) -> bool {
+  if password.len() < 8 {
+    return false;
+  }
+
+  let mut uppercase = false;
+  let mut lowercase = false;
+  let mut digit = false;
+  let mut special = false;
+
+  password.chars().any(|x| {
+    if x.is_ascii_digit() {
+      digit = true;
+    }
+
+    if x.is_ascii_uppercase() {
+      uppercase = true;
+    }
+
+    if x.is_ascii_lowercase() {
+      lowercase = true;
+    }
+
+    if !x.is_ascii_alphanumeric() {
+      special = true;
+    }
+
+    digit && uppercase && lowercase && special
+  })
 }
 
 pub const VALUES: [char; 64] = [

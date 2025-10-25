@@ -1,5 +1,6 @@
 use crate::server::{
-  AUTH, CONFIG, HISTORY_LENGTH, OLLAMA, chat::ollama::{Message, OllamaMsgResp, OllamaRequest}
+  AUTH, CONFIG, HISTORY_LENGTH, OLLAMA,
+  chat::ollama::{Message, OllamaMsgResp, OllamaRequest},
 };
 use actix_web::{HttpRequest, HttpResponse, Result, rt, web::Payload};
 use actix_ws::{AggregatedMessage, Session};
@@ -177,35 +178,30 @@ async fn handle_msg_faillable(
       }
 
       *init = true;
-      history.extend(
-        hist
-          .into_iter()
-          .map(|x| {
-            match x {
-              Message::User { message, images } => {
-                let mut msg = ChatMessage::new(MessageRole::User, message);
-                
-                if let Some(images) = images {
-                  msg = msg.with_images(
-                    images.into_iter()
-                      .map(|x| Image::from_base64(x))
-                      .collect::<Vec<_>>()
-                  )
-                }
+      history.extend(hist.into_iter().map(|x| match x {
+        Message::User { message, images } => {
+          let mut msg = ChatMessage::new(MessageRole::User, message);
 
-                msg
-              },
-              Message::System { prompt } => ChatMessage::new(MessageRole::System, prompt),
-              Message::Assistant { message, thinking } => {
-                let mut msg = ChatMessage::new(MessageRole::Assistant, message);
+          if let Some(images) = images {
+            msg = msg.with_images(
+              images
+                .into_iter()
+                .map(|x| Image::from_base64(x))
+                .collect::<Vec<_>>(),
+            )
+          }
 
-                msg.thinking = thinking;
+          msg
+        }
+        Message::System { prompt } => ChatMessage::new(MessageRole::System, prompt),
+        Message::Assistant { message, thinking } => {
+          let mut msg = ChatMessage::new(MessageRole::Assistant, message);
 
-                msg
-              }
-            }
-          }),
-      );
+          msg.thinking = thinking;
+
+          msg
+        }
+      }));
 
       return Some(model);
     }

@@ -24,7 +24,19 @@ pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
   from_str(&data).expect("Invalid configuration file, unable to parse")
 });
 
-pub static HISTORY_LENGTH: LazyLock<usize> = LazyLock::new(|| CONFIG.ollama.msgs.checked_mul(2).unwrap_or(usize::MAX));
+pub static HISTORY_LENGTH: LazyLock<usize> =
+  LazyLock::new(|| CONFIG.ollama.msgs.checked_mul(2).unwrap_or(usize::MAX));
+
+pub static MAX_ACCOUNTS: LazyLock<u64> = LazyLock::new(|| {
+  let Authentication::Account { max_users, .. } = &CONFIG.authentication else {
+    return u64::MAX;
+  };
+
+  max_users
+    .as_ref()
+    .and_then(|x| Some(*x))
+    .unwrap_or(u64::MAX)
+});
 
 pub static TOKEN: LazyLock<bool> =
   LazyLock::new(|| matches!(CONFIG.authentication, Authentication::TokenBased));
@@ -52,8 +64,17 @@ pub async fn main() -> std::io::Result<()> {
   let mut chalk = launch();
 
   let auth = !matches!(CONFIG.authentication, Authentication::OpenToAll);
+  let mut registration_api = false;
 
   if auth {
+    if let Authentication::Account {
+      registration_allowed,
+      ..
+    } = &CONFIG.authentication
+    {
+      registration_api = *registration_allowed;
+    }
+
     _ = AUTH.set(AuthSessionManager::create().await);
   }
 
@@ -65,7 +86,7 @@ pub async fn main() -> std::io::Result<()> {
     println!("----------------");
   }
 
-  let mut server = HttpServer::new(|| {
+  let mut server = HttpServer::new(move || {
     let mut app = App::new()
       .service(http::index)
       .route("/chat", web::get().to(chat::chat));
@@ -74,6 +95,10 @@ pub async fn main() -> std::io::Result<()> {
 
     if auth {
       app = app.service(auth::auth);
+    }
+
+    if registration_api {
+      // TODO: Registration stuff
     }
 
     app
