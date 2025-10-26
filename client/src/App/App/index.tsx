@@ -1,16 +1,28 @@
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import Sidebar from "./Sidebar";
+
+export enum AppPage {
+  Onboarding = 0,
+  Home = 1,
+  Diposable = 2,
+  Chat = 3,
+  Admin = 4,
+  Settings = 5
+}
 
 export default function Application() {
   const tab = useMediaQuery("(min-width: 768px)");
+
+  const [] = useState<AppPage>(AppPage.Onboarding);
 
   if (tab) {
     return <ApplicationDesktop />;
   }
 
   // Use a bottom nav bar
-  return <>Mobile</>;
+  return <>Content</>;
 }
 
 export function ApplicationDesktop() {
@@ -34,7 +46,7 @@ export function ApplicationDesktop() {
     }
   }, [lg]);
 
-  return <ResizablePanelGroup className="!w-screen !h-screen" direction="horizontal">
+  return <ResizablePanelGroup className="w-screen! h-screen!" direction="horizontal">
     <ResizablePanel
       minSize={min}
       maxSize={max}
@@ -44,10 +56,10 @@ export function ApplicationDesktop() {
       }}
       className="h-full w-full"
     >
-      Sidebar
+      <Sidebar />
     </ResizablePanel>
 
-    <ResizableHandle className="!bg-none" withHandle />
+    <ResizableHandle className="bg-none!" withHandle />
 
     <ResizablePanel className="bg-neutral/40 rounded-tl-4xl p-3">
       Content

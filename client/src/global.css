@@ -137,5 +137,21 @@
 
 html[no-transparent] head,
 html[no-transparent] body {
-  @apply !bg-base-100;
+  @apply bg-base-100!;
+}
+
+*::-webkit-scrollbar,
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-button,
+*::-webkit-scrollbar-track {
+  background-color: transparent;
+  width: none !important;
+}
+
+* {
+  scrollbar-width: none;
+}
+
+[data-slot="resizable-handle"] {
+  background-color: transparent !important;
 }

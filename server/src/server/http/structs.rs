@@ -19,6 +19,7 @@ pub static ROOT_RESPONSE_DATA: LazyLock<Vec<u8>> = LazyLock::new(|| {
 
 #[derive(Serialize)]
 pub struct RootResponse {
+  version: &'static str,
   auth: ShowedAuth,
   can_register: bool,
   vision_models: Vec<&'static str>,
@@ -28,6 +29,7 @@ pub struct RootResponse {
 impl RootResponse {
   pub fn new() -> Self {
     let mut out = Self {
+      version: env!("CARGO_PKG_VERSION"),
       auth: ShowedAuth::OpenToAll,
       can_register: false,
       text_models: vec![],
