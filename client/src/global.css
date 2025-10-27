@@ -140,6 +140,16 @@ html[no-transparent] body {
   @apply bg-base-100!;
 }
 
+html.dark[no-transparent] head,
+html.dark[no-transparent] body {
+  /* background-image: url("/img20.jpg");
+  background-size: cover;
+
+  backdrop-filter: blur(40px); */
+
+  @apply bg-base-100!;
+}
+
 *::-webkit-scrollbar,
 *::-webkit-scrollbar-thumb,
 *::-webkit-scrollbar-button,

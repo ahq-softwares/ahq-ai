@@ -16,8 +16,9 @@
         "title": "AHQ AI",
         "width": 900,
         "height": 768,
+        "minWidth": 356,
         "windowEffects": {
-          "effects": ["mica", "contentBackground"]
+          "effects": ["mica", "acrylic", "windowBackground"]
         },
         "transparent": true,
         "visible": false

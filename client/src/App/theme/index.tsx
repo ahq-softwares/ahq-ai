@@ -1,5 +1,11 @@
 import { createContext, ReactNode, useContext, useEffect, useState } from "react";
 
+import { platform } from "@tauri-apps/plugin-os"
+
+const currently = platform();
+
+const vibrantOs = ["windows", "macos"];
+
 export enum Theme {
   Light,
   Dark
@@ -21,7 +27,7 @@ const getCurrOSTheme = () => {
 const setTheme = (theme: Theme, os: Theme) => {
   const html = document.querySelector("html")!!;
   // how much is left?
-  if (theme == os) {
+  if (theme == os && vibrantOs.includes(currently)) {
     html.removeAttribute("no-transparent");
   } else {
     html.setAttribute("no-transparent", "true");

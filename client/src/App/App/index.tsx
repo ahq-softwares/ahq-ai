@@ -2,30 +2,78 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useMemo, useState } from "react";
 import Sidebar from "./Sidebar";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+
+import { Menu } from "lucide-react";
 
 export enum AppPage {
-  Onboarding = 0,
-  Home = 1,
   Diposable = 2,
   Chat = 3,
   Admin = 4,
-  Settings = 5
+  Settings = 5,
+  ChatPage = 6,
 }
+
+const txtMap = {
+  2: "New Disposable Chat",
+  3: "New Chat",
+  4: "Administrator Portal",
+  5: "Settings",
+  6: ""
+};
 
 export default function Application() {
   const tab = useMediaQuery("(min-width: 768px)");
 
-  const [] = useState<AppPage>(AppPage.Onboarding);
+  const [dialogOpen, setOpeNav] = useState(false);
+  const [page, setPage] = useState<AppPage>(AppPage.Chat);
 
   if (tab) {
-    return <ApplicationDesktop />;
+    return <ApplicationDesktop pageSet={(page) => setPage(page)} />;
   }
 
-  // Use a bottom nav bar
-  return <>Content</>;
+  // Use a hamburger sidebar
+  return <div className="flex flex-col h-screen! w-screen!">
+    <div className="h-12 px-2 flex text-center w-full">
+      <Sheet open={dialogOpen} onOpenChange={(c) => setOpeNav(c)}>
+        <SheetTrigger>
+          <div className="cursor-pointer rounded-lg hover:bg-neutral/40 p-2 text-muted-foreground">
+            <Menu size={"1rem"} />
+          </div>
+        </SheetTrigger>
+
+        <SheetContent side="left">
+          <SheetHeader>
+            <SheetTitle aria-valuetext="Sidebar" aria-description="Sidebar"></SheetTitle>
+            <SheetDescription aria-valuetext="Sidebar"></SheetDescription>
+          </SheetHeader>
+
+          <Sidebar
+            chats={[]}
+            pageSet={(page) => {
+              setOpeNav(false);
+              setPage(page);
+            }}
+          />
+        </SheetContent>
+      </Sheet>
+
+      <div className="mx-auto select-none text-sm text-muted-foreground flex text-center justify-center items-center">
+        <span>{txtMap[page]}</span>
+      </div>
+
+      <div className="rounded-lg p-2 text-transparent">
+        <Menu size={"1rem"} />
+      </div>
+    </div>
+  </div>;
 }
 
-export function ApplicationDesktop() {
+interface Props {
+  pageSet: (page: AppPage) => void;
+}
+
+export function ApplicationDesktop({ pageSet }: Props) {
   const lg = useMediaQuery("(min-width: 1024px)");
 
   const { min, max, def } = useMemo(() => {
@@ -56,7 +104,10 @@ export function ApplicationDesktop() {
       }}
       className="h-full w-full"
     >
-      <Sidebar />
+      <Sidebar
+        chats={[]}
+        pageSet={pageSet}
+      />
     </ResizablePanel>
 
     <ResizableHandle className="bg-none!" withHandle />

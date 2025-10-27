@@ -1,33 +1,52 @@
 import { Separator } from "@/components/ui/separator";
 import { MessageCircleDashed, MessageCircle, Settings, ShieldUser, LucideProps } from "lucide-react";
 import { ForwardRefExoticComponent, RefAttributes } from "react";
+import { AppPage } from ".";
 
-interface SidebarProps {
-
+interface Chat {
+  content: string;
+  id: string;
 }
 
-export default function Sidebar(props: SidebarProps) {
+interface SidebarProps {
+  chats: Chat[];
+  pageSet: (prop: AppPage) => void;
+}
+
+export default function Sidebar({ chats, pageSet }: SidebarProps) {
   return <div className="w-full h-full px-3 py-2 gap-1 flex flex-col overflow-y-scroll overflow-x-clip">
     <SidebarItem
       text="New Chat"
       Icon={MessageCircle}
+      activated={() => {
+        pageSet(AppPage.Chat);
+      }}
     />
 
     <SidebarItem
-      text="New Chat"
+      text="Disposable Chat"
       Icon={MessageCircleDashed}
+      activated={() => {
+        pageSet(AppPage.Diposable);
+      }}
     />
 
     <Separator />
 
     <div className="h-full flex flex-col w-full">
-      <div className="text-muted-foreground mx-auto">
+      <div className="text-muted-foreground select-none ml-2">
         Chats
       </div>
-      <SidebarItem
-        text="When operating systems don't work as expected"
-        Icon={MessageCircle}
-      />
+
+      {chats.map((data) => (
+        <SidebarItem
+          text={data.content}
+          Icon={MessageCircle}
+          key={data.id}
+        />
+      ))}
+
+      {chats.length == 0 && <span className="mx-auto mt-2 select-none text-secondary-foreground">No chats found</span>}
     </div>
 
     <Separator />
@@ -35,17 +54,23 @@ export default function Sidebar(props: SidebarProps) {
     <SidebarItem
       text="Admin Portal"
       Icon={ShieldUser}
+      activated={() => {
+        pageSet(AppPage.Admin);
+      }}
     />
 
     <SidebarItem
       text="Settings"
       Icon={Settings}
+      activated={() => {
+        pageSet(AppPage.Settings);
+      }}
     />
   </div>
 }
 
-function SidebarItem({ text, Icon }: { text: string, Icon: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>> }) {
-  return <div className="w-full h-10 flex overflow-x-hidden rounded-lg overflow-y-hidden px-3 gap-2 py-2 select-none cursor-pointer transition-all border border-transparent hover:shadow-lg hover:border-border hover:bg-neutral/30 items-center group">
+function SidebarItem({ text, Icon, activated }: { text: string, Icon: ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>, activated?: () => void }) {
+  return <div onClick={() => activated && activated()} className="w-full h-10 flex overflow-x-hidden rounded-lg overflow-y-hidden px-3 gap-2 py-2 select-none cursor-pointer transition-all border border-transparent hover:shadow-lg hover:border-border hover:bg-neutral/30 items-center group">
     <Icon className="text-muted-foreground group-hover:text-base-content min-h-5 max-h-5 min-w-5 max-w-5" />
     <span className="text-sm line-clamp-1 text-muted-foreground group-hover:text-base-content">{text}</span>
   </div>
