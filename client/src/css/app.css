@@ -2,9 +2,9 @@
   @apply transition-all;
 }
 
-div[data-state="open"] {
+/* div[data-state="open"] {
   @apply bg-transparent!;
-}
+} */
 
 div[role="dialog"] {
   @apply bg-base-100/80!;

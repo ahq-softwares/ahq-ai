@@ -24,7 +24,7 @@ export default function Sidebar({ chats, pageSet }: SidebarProps) {
     />
 
     <SidebarItem
-      text="Disposable Chat"
+      text="Incognito Chat"
       Icon={MessageCircleDashed}
       activated={() => {
         pageSet(AppPage.Diposable);

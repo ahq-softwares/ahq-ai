@@ -1,10 +1,11 @@
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { useMemo, useState } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import Sidebar from "./Sidebar";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 import { Menu } from "lucide-react";
+import Settings from "./Settings";
 
 export enum AppPage {
   Diposable = 2,
@@ -15,7 +16,7 @@ export enum AppPage {
 }
 
 const txtMap = {
-  2: "New Disposable Chat",
+  2: "Incognito Chat",
   3: "New Chat",
   4: "Administrator Portal",
   5: "Settings",
@@ -28,8 +29,17 @@ export default function Application() {
   const [dialogOpen, setOpeNav] = useState(false);
   const [page, setPage] = useState<AppPage>(AppPage.Chat);
 
+  const content = useMemo(() => {
+    switch (page) {
+      case AppPage.Settings:
+        return <Settings />
+      default:
+        return <>Hi</>;
+    }
+  }, [page]);
+
   if (tab) {
-    return <ApplicationDesktop pageSet={(page) => setPage(page)} />;
+    return <ApplicationDesktop content={content} pageSet={(page) => setPage(page)} />;
   }
 
   // Use a hamburger sidebar
@@ -66,14 +76,19 @@ export default function Application() {
         <Menu size={"1rem"} />
       </div>
     </div>
+
+    <div className="w-full h-full flex flex-col px-4">
+      {content}
+    </div>
   </div>;
 }
 
 interface Props {
   pageSet: (page: AppPage) => void;
+  content: ReactNode | ReactNode[]
 }
 
-export function ApplicationDesktop({ pageSet }: Props) {
+export function ApplicationDesktop({ pageSet, content }: Props) {
   const lg = useMediaQuery("(min-width: 1024px)");
 
   const { min, max, def } = useMemo(() => {
@@ -112,8 +127,8 @@ export function ApplicationDesktop({ pageSet }: Props) {
 
     <ResizableHandle className="bg-none!" withHandle />
 
-    <ResizablePanel className="bg-neutral/40 rounded-tl-4xl p-3">
-      Content
+    <ResizablePanel className="bg-neutral/30 rounded-tl-2xl w-full h-full p-3 flex flex-col">
+      {content}
     </ResizablePanel>
   </ResizablePanelGroup>
 }

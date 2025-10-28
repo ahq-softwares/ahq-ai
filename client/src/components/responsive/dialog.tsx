@@ -29,13 +29,23 @@ interface DialogProps {
   buttonVariant: "link" | "default" | "destructive" | "outline" | "secondary" | "ghost" | null | undefined;
   title?: string;
   description?: string;
-  content: React.ReactNode
+  content: React.ReactNode;
+  open: boolean;
+  setOpen: (_: boolean) => void;
 }
 
 export function ResponsiveDialog(
-  { button, buttonVariant, title, content, description, triggerButtonOverrides = false }: DialogProps
+  {
+    button,
+    buttonVariant,
+    title,
+    content,
+    description,
+    triggerButtonOverrides = false,
+    open,
+    setOpen
+  }: DialogProps
 ) {
-  const [open, setOpen] = React.useState(false)
   const isDesktop = useMediaQuery("(min-width: 768px)")
 
   if (isDesktop) {
@@ -44,10 +54,10 @@ export function ResponsiveDialog(
         <DialogTrigger asChild>
           {triggerButtonOverrides ? button : <Button variant={buttonVariant}>{button}</Button>}
         </DialogTrigger>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-left">
               {description}
             </DialogDescription>
           </DialogHeader>
@@ -70,7 +80,9 @@ export function ResponsiveDialog(
           </DrawerDescription>
         </DrawerHeader>
 
-        {content}
+        <div className="w-full h-full px-4">
+          {content}
+        </div>
 
         <DrawerFooter className="pt-2">
           <DrawerClose asChild>

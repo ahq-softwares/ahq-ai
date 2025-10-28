@@ -210,7 +210,9 @@ async fn handle_msg_faillable(
     OllamaRequest::ChatCompletion { prompt, images } => {
       if !*init {
         if using_json {
-          _ = session.text(r#"{ "msg": "Initialization Required" }"#).await;
+          _ = session
+            .text(r#"{ "msg": "Initialization Required" }"#)
+            .await;
         } else {
           _ = session
             .text(r#"{ "msg": "Initialization Required TODO: BSON" }"#)

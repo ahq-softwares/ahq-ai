@@ -90,7 +90,7 @@ pub async fn main() -> std::io::Result<()> {
     let auth = !matches!(CONFIG.authentication, Authentication::OpenToAll);
 
     if auth {
-      app = app.service(auth::auth);
+      app = app.service(auth::auth).service(http::me);
     }
 
     if registration_api {

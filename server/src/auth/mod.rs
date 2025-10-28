@@ -133,7 +133,10 @@ impl AuthSessionManager {
 
     self
       .sessions
-      .insert(userid.to_owned().into_boxed_str(), Arc::new(sess.into_boxed_str()))
+      .insert(
+        userid.to_owned().into_boxed_str(),
+        Arc::new(sess.into_boxed_str()),
+      )
       .await;
 
     Ok(AccountCheckOutcome::Some(sess_cloned))
