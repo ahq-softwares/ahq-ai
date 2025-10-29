@@ -1,9 +1,7 @@
-Register-PSRepository -Default
-Install-Module -Name PSToml -Force -SkipPublisherCheck -AcceptLicense -Scope CurrentUser -ErrorAction Continue
+$versionLine = Get-Content "./client/src-tauri/Cargo.toml" | Select-String -Pattern '^version\s*='
 
-$obj = ConvertFrom-Toml (Get-Content "./client/src-tauri/Cargo.toml")
-
-$version = $obj.package.version
+$version = $versionLine -split '=' | Select-Object -Last 1
+$version = $version.Trim().Replace('"', '')
 
 $suffix = Get-Date -Format "yyyy.MM.dd.HH.mm.ss"
 
