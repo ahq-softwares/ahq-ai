@@ -14,9 +14,12 @@
     "host": "http://127.0.0.1",
     "port": 11434,
     "msgs": 80,
-    "cvmodels": [],
+    "cvmodels": [
+      "llava:7b"
+    ],
     "txtmodels": [
-      "gemma3:270m"
+      "gemma3:270m",
+      "llama3:8b"
     ]
   },
   "authentication": {

@@ -1,9 +1,9 @@
 ---
-title: Download
+title: Docs
 editLink: false
 ---
 
 <script>
 </script>
 
-# Windows
+# Docs

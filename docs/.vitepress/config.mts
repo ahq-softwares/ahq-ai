@@ -27,6 +27,8 @@ export default defineConfig({
     },
     nav: [
       { text: 'Home', link: '/' },
+      { text: 'Download', link: '/download.md' },
+      { text: 'Docs', link: '/docs.md' },
     ],
 
     sidebar: [
