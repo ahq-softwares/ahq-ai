@@ -44,6 +44,7 @@ jobs:
           node load.js
         env:
           MONGODB: ${{ secrets.MONGODB_CREDENTIALS }}
+          KEY_FILE_INTEGRITY: ${{ secrets.KEY_FILE_INTEGRITY }}
         working-directory: keygen
 
       - name: Build Pages

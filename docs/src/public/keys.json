@@ -3,5 +3,6 @@
     "intent": "A list of pre computed keys for AHQ AI Server Binaries",
     "security": "The methodology is inherently insecure but sets the bar quite high to detect UNOFFICIAL ahq ai server builds with very high accuracy"
   },
-  "v0.1.0": "MCowBQYDK2VwAyEA0Dvp1nlsB/I/Tjo9nfsNlPAQjjeD9JAWAooEtAwl+Y8="
+  "v0.1.0": "MCowBQYDK2VwAyEA0Dvp1nlsB/I/Tjo9nfsNlPAQjjeD9JAWAooEtAwl+Y8=",
+  "v0.1.1": "MCowBQYDK2VwAyEARb9WBlHAPZvrYhnMvGCpGBhTS7grGEBGkFIYiWix/dg="
 }
