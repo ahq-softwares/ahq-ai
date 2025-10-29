@@ -99,7 +99,7 @@ jobs:
         working-directory: server/target/${{ matrix.target }}/release
 
       - name: Upload server artifact
-        uses: actions/upload-artifact
+        uses: actions/upload-artifact@v5
         with:
           name: server-${{ matrix.target }}
           path: ./server/target/${{ matrix.target }}/release/ahqai-server*
