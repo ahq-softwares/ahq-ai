@@ -8,6 +8,7 @@ on:
     paths:
       - server/**
       - .github/**
+      - genServerTag.ps1
 
 permissions: write-all
 

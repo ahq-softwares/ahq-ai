@@ -1,3 +1,4 @@
+Register-PSRepository -Name PSGallery -SourceLocation https://www.powershellgallery.com/ -InstallationPolicy Trusted
 Install-Module -Name PSToml -Force -SkipPublisherCheck -AcceptLicense -Scope CurrentUser -ErrorAction Continue
 
 $obj = ConvertFrom-Toml (Get-Content "./client/src-tauri/Cargo.toml")
