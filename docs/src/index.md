@@ -15,8 +15,8 @@ hero:
       link: /download
 
     - theme: alt
-      text: Guide
-      link: /api-examples
+      text: Docs
+      link: /docs
 
 features:
   - title: Open Sourced
