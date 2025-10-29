@@ -90,16 +90,32 @@ jobs:
           target: ${{ matrix.target }}
           components: rustfmt
 
+      - name: Linux Prereq
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt update
+          sudo apt install libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
       - name: Build frontend
         run: |
           npm i -g pnpm
 
+          pnpm install
+
           cd src-plugin
             pnpm install
+            pnpm add -D rollup
+
             pnpm build
           cd ..
-
-          pnpm install
         working-directory: client
 
       - name: Build Chat App
