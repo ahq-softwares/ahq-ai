@@ -4,7 +4,7 @@ $obj = ConvertFrom-Toml (Get-Content "./server/Cargo.toml")
 
 $version = $obj.package.version
 
-$suffix = Get-Date -Format "yyyy-MM-dd.HH:mm:ss"
+$suffix = Get-Date -Format "yyyy.MM.dd.HH.mm.ss"
 
 $out = $version
 
