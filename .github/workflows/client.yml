@@ -127,6 +127,9 @@ jobs:
         with:
           releaseId: ${{ needs.create.outputs.release_id }}
           args: --target ${{ matrix.target }}
+          projectPath: client
+          includeDebug: true
+          includeRelease: true
 
   publish:
     name: Publish release
