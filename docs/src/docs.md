@@ -1,6 +1,6 @@
 ---
 title: Docs
-editLink: false
+editLink: true
 ---
 
 <script>
