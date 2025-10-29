@@ -4,8 +4,8 @@ layout: home
 
 hero:
   name: "AHQ AI"
-  text: "The Next Generation AI Client - Server"
-  tagline: My great project tagline
+  text: "AI, Reimagined"
+  tagline: "The open sourced, Host Your Own AI Solution. Free to everyone, acessible to all"
   actions:
     - theme: brand
       text: Markdown Examples
@@ -22,4 +22,3 @@ features:
   - title: Feature C
     details: Lorem ipsum dolor sit amet, consectetur adipiscing elit
 ---
-
