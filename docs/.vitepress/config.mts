@@ -6,7 +6,7 @@ export default defineConfig({
 
   title: "AHQ AI",
   description: "The Next Generation AI Client - Server",
-  base: "https://ahq-softwares.github.io/ahq-ai",
+  base: "/ahq-ai",
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
     nav: [
