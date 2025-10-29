@@ -15,6 +15,12 @@ export default defineConfig({
     lastUpdated: {
       text: "Last Updated "
     },
+    search: {
+      provider: "local"
+    },
+    editLink: {
+      pattern: 'https://github.com/ahq-softwares/ahq-ai/edit/main/docs/src/:path'
+    },
     footer: {
       copyright: "©AHQ Softwares",
       message: "Licensed under GNU Public License 3.0"

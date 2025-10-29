@@ -12,7 +12,7 @@ hero:
   actions:
     - theme: brand
       text: Download
-      link: /markdown-examples
+      link: /download
 
     - theme: alt
       text: Guide
@@ -41,8 +41,7 @@ features:
 
   - title: Ollama Backend
     details: We use the strongest and the most flexible AI backend available, it is Ollama, the docker of AI
-    icon:
-      src: https://www.deepchecks.com/wp-content/uploads/2024/09/logo-ollama.png
+    icon: 🦙
 
   - title: Resource Efficient
     details: Designed to minimize hardware strain. Run high-performance inference thanks to our rust backend.
@@ -52,3 +51,42 @@ features:
     details: Your data, your device. The client stores all chat history — never the server (when using the official build). Share history temporarily only when you choose to connect.
     icon: 📍
 ---
+
+<script setup>
+  import { VPTeamMembers } from 'vitepress/theme';
+
+  const members = [
+    {
+      avatar: 'https://avatars.githubusercontent.com/u/84524025?v=4',
+      name: 'Akshanabha Chakraborty',
+      title: 'Creator',
+      links: [
+        { icon: 'github', link: 'https://github.com/ahqsoftwares' },
+        { icon: 'x', link: 'https://x.com/ahqsoftwares' }
+      ]
+    },
+    {
+      avatar: 'https://avatars.githubusercontent.com/u/92421141?v=4',
+      name: 'Rohan Murudkar',
+      title: 'Co-Creator',
+      links: [
+        { icon: 'github', link: 'https://github.com/YourJailDev' },
+      ]
+    },
+    {
+      avatar: 'https://avatars.githubusercontent.com/u/72635727?v=4',
+      name: 'Robinson Arysseril',
+      title: 'Lead Developer',
+      links: [
+        { icon: 'github', link: 'https://github.com/death7654' },
+      ]
+    }
+  ]
+
+</script>
+
+<div style="margin-top: 30px;" />
+
+# Our Team
+
+<VPTeamMembers size="small" :members />
