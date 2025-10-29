@@ -33,25 +33,16 @@ export default defineConfig({
 
     sidebar: [
       {
-        text: "AHQ AI",
+        text: "Download",
+        link: "/download"
+      },
+      {
+        text: 'Docs',
         collapsed: false,
         items: [
-          {
-            text: 'Download',
-            collapsed: false,
-            items: [
-              { text: "Get AHQ AI", link: "/download.md" }
-            ]
-          },
-          {
-            text: 'Docs',
-            collapsed: false,
-            items: [
-              { text: "Introduction", link: "/docs.md" },
-              { text: "Server Setup", link: "/serversetup.md" },
-              { text: "Client Setup", link: "/clientsetup.md" },
-            ]
-          }
+          { text: "Introduction", link: "/docs.md" },
+          { text: "Server Setup", link: "/serversetup.md" },
+          { text: "Client Setup", link: "/clientsetup.md" },
         ]
       }
     ],

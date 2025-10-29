@@ -37,6 +37,15 @@ jobs:
         with:
           node-version: ">=22"
 
+      - name: Load keys
+        run: |
+          npm i -g pnpm
+          pnpm install
+          node load.js
+        env:
+          MONGODB: ${{ secrets.MONGODB_CREDENTIALS }}
+        working-directory: keygen
+
       - name: Build Pages
         run: |
           npm i -g pnpm

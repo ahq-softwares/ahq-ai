@@ -15,4 +15,5 @@ if ($env:BRANCH_NAME -eq "main") {
 if ($env:GITHUB_OUTPUT -ne "") {
   "tag=server-v$out" >> "$env:GITHUB_OUTPUT"
   "out=v$out" >> "$env:GITHUB_OUTPUT"
+  "abs=v$version" >> "$env:GITHUB_OUTPUT"
 }
