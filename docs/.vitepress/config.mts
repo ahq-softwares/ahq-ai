@@ -32,6 +32,26 @@ export default defineConfig({
     ],
 
     sidebar: [
+      {
+        text: "AHQ AI",
+        collapsed: false,
+        items: [
+          {
+            text: 'Download',
+            collapsed: false,
+            items: [
+              { text: "Get AHQ AI", link: "/download.md" }
+            ]
+          },
+          {
+            text: 'Docs',
+            collapsed: false,
+            items: [
+              { text: "Setup", link: "/docs.md" }
+            ]
+          }
+        ]
+      }
     ],
 
     socialLinks: [
