@@ -1,0 +1,4 @@
+name: Build AHQ AI Client
+
+on:
+  push:

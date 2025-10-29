@@ -1,0 +1,152 @@
+name: Build AHQ AI Server
+
+on:
+  push:
+    branches:
+      - main
+      - server-v*
+
+permissions: write-all
+
+jobs:
+  create:
+    name: Create Release
+
+    outputs:
+      upload_url: ${{ steps.rel.outputs.upload_url }}
+      release_id: ${{ steps.rel.outputs.id }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Get Tag Data
+        shell: pwsh
+        id: tag
+        run: |
+          ./genServerTag.ps1
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        id: rel
+        with:
+          name: AHQ AI Server ${{ steps.tag.outputs.out }}
+          body_path: ./RELEASE_SERVER.md
+          append_body: true
+          generate_release_notes: true
+          tag_name: ${{ steps.tag.outputs.tag }}
+          prerelease: ${{ github.ref_name == 'main' }}
+          make_latest: false
+          draft: true
+
+  build:
+    name: Build Server
+
+    needs: [create]
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: true
+
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+
+          - os: macos-latest
+            target: x86_64-apple-darwin
+
+          - os: macos-latest
+            target: aarch64-apple-darwin
+
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+
+          - os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+          target: ${{ matrix.target }}
+          components: rustfmt
+
+      - name: Build Server
+        shell: pwsh
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+        working-directory: server
+
+      - name: Rename File
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path . -Filter "ahqai-server*" | 
+          Rename-Item -NewName { 
+            $_.Name -replace '^ahqai-server', "ahqai-server-${{ matrix.target }}" 
+          }
+        working-directory: server/target/${{ matrix.target }}/release
+
+      - name: Upload server artifact
+        uses: actions/upload-artifact
+        with:
+          name: server-${{ matrix.target }}
+          path: ./server/target/${{ matrix.target }}/release/ahqai-server*
+
+      - name: Upload Binaries
+        uses: AButler/upload-release-assets@v3.0
+        with:
+          files: |
+            ./server/target/${{ matrix.target }}/release/ahqai-server*
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          release-id: ${{ needs.create.outputs.release_id }}
+
+  publish:
+    name: Publish release
+
+    needs: [create, build]
+    if: success()
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Undraft Release
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: "${{ github.repository_owner }}",
+              repo: "${{ github.repository }}".split("/")[1],
+              release_id: ${{ needs.create.outputs.release_id }},
+              draft: false
+            });
+
+  delete:
+    name: Delete release in failure
+
+    needs: [create, build]
+    if: failure()
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Delete Release
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.repos.deleteRelease({
+              owner: "${{ github.repository_owner }}",
+              repo: "${{ github.repository }}".split("/")[1],
+              release_id: ${{ needs.create.outputs.release_id }}
+            });
