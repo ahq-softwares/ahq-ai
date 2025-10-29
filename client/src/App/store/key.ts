@@ -1,0 +1,1 @@
+export const PUBLIC_FILE_INTEGRITY_KEY = "MCowBQYDK2VwAyEA5BpaiosWPRqkuYBPwWyoZejkXrT2ewZqRgLkc9iu4Ac=";

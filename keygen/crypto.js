@@ -1,6 +1,9 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+
+const { MongoClient, ServerApiVersion } = require("mongodb");
+
 const FALLBACK = "AHQSoftwaresTestingSignatureKeyUsedDuringFallback123";
 
 const MASTER_SECRET_SEED = process.env.SEED || FALLBACK;
@@ -66,19 +69,30 @@ fs.writeFileSync(
 
 const base64Key = Buffer.from(keys.publicKey).toString("base64");
 
-console.log("\n" + "-".repeat(50));
-console.log("GENERATED PUBLIC KEY (SAFE TO SHARE)");
-console.log("-".repeat(50));
-console.log(base64Key);
-console.log("-".repeat(50));
+async function run() {
+  const client = new MongoClient(process.env.MONGODB, {
+    serverApi: {
+      version: ServerApiVersion.v1,
+      strict: true,
+      deprecationErrors: true,
+    },
+  });
 
-const keysJson = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "../docs/src/public/keys.json"))
-);
+  try {
+    await client.connect();
 
-keysJson[APP_VERSION] = base64Key;
+    await client.db("keys").collection("keys").insertOne({
+      _id: APP_VERSION,
+      key: base64Key,
+    });
+  } catch (e) {
+    console.error(e);
+  } finally {
+    await client.close();
+  }
+}
 
-fs.writeFileSync(
-  path.join(__dirname, "../docs/src/public/keys.json"),
-  JSON.stringify(keysJson, null, 2)
-);
+if (process.env.MONGODB) {
+  console.log("Pushing to MongoDB");
+  run().catch(console.dir);
+}

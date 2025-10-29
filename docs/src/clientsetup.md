@@ -1,6 +1,6 @@
 ---
 title: Client Setup
-editLink: trueß
+editLink: true
 ---
 
 <script>

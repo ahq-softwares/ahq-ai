@@ -1,8 +1,7 @@
-Install-Module -Name PSToml -Force -SkipPublisherCheck -AcceptLicense -Scope CurrentUser -ErrorAction Continue
+$versionLine = Get-Content "./server/Cargo.toml" | Select-String -Pattern '^version\s*='
 
-$obj = ConvertFrom-Toml (Get-Content "./server/Cargo.toml")
-
-$version = $obj.package.version
+$version = $versionLine -split '=' | Select-Object -Last 1
+$version = $version.Trim().Replace('"', '')
 
 $suffix = Get-Date -Format "yyyy.MM.dd.HH.mm.ss"
 
@@ -15,4 +14,5 @@ if ($env:BRANCH_NAME -eq "main") {
 if ($env:GITHUB_OUTPUT -ne "") {
   "tag=server-v$out" >> "$env:GITHUB_OUTPUT"
   "out=v$out" >> "$env:GITHUB_OUTPUT"
+  "abs=v$version" >> "$env:GITHUB_OUTPUT"
 }

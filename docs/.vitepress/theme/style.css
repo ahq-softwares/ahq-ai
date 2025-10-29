@@ -137,3 +137,8 @@
   --docsearch-primary-color: var(--vp-c-brand-1) !important;
 }
 
+::-webkit-scrollbar,
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-button {
+  width: 0px !important;
+}
