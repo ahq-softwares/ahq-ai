@@ -47,7 +47,9 @@ export default defineConfig({
             text: 'Docs',
             collapsed: false,
             items: [
-              { text: "Setup", link: "/docs.md" }
+              { text: "Introduction", link: "/docs.md" },
+              { text: "Server Setup", link: "/serversetup.md" },
+              { text: "Client Setup", link: "/clientsetup.md" },
             ]
           }
         ]
