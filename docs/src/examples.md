@@ -102,3 +102,7 @@ Some more content here.
 Content outside `My Base Section`.
 
 ![An image](/icon.png)
+
+```
+console.log('Hello, VitePress!')
+```

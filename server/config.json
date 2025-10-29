@@ -18,8 +18,7 @@
       "llava:7b"
     ],
     "txtmodels": [
-      "gemma3:270m",
-      "llama3:8b"
+      "llama3:7b"
     ]
   },
   "authentication": {
