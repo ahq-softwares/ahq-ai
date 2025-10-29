@@ -1,12 +1,12 @@
-name: Build AHQ AI Server
+name: Build AHQ AI Client
 
 on:
   push:
     branches:
       - main
-      - server-v*
-    paths:
-      - server/**
+      - client-v*
+    # paths:
+    # - client/**
 
 permissions: write-all
 
@@ -28,7 +28,7 @@ jobs:
         shell: pwsh
         id: tag
         run: |
-          ./genServerTag.ps1
+          ./genClientTag.ps1
         env:
           BRANCH_NAME: ${{ github.ref_name }}
 
@@ -36,17 +36,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         id: rel
         with:
-          name: AHQ AI Server ${{ steps.tag.outputs.out }}
+          name: AHQ AI Chat ${{ steps.tag.outputs.out }}
           body_path: ./RELEASE_SERVER.md
           append_body: true
           generate_release_notes: true
           tag_name: ${{ steps.tag.outputs.tag }}
           prerelease: ${{ github.ref_name == 'main' }}
-          make_latest: false
+          make_latest: true
           draft: true
 
-  build:
-    name: Build Server
+  build-desktop:
+    name: Build Client (Desktop)
 
     needs: [create]
     runs-on: ${{ matrix.os }}
@@ -78,6 +78,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Setup NodeJS
+        uses: actions/setup-node@v5
+        with:
+          node-version: ">=24"
+
       - name: Setup Rust
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
@@ -85,39 +90,29 @@ jobs:
           target: ${{ matrix.target }}
           components: rustfmt
 
-      - name: Build Server
-        shell: pwsh
+      - name: Build frontend
         run: |
-          cargo build --release --target ${{ matrix.target }}
-        working-directory: server
+          npm i -g pnpm
 
-      - name: Rename File
-        shell: pwsh
-        run: |
-          Get-ChildItem -Path . -Filter "ahqai-server*" | 
-          Rename-Item -NewName { 
-            $_.Name -replace '^ahqai-server', "ahqai-server-${{ matrix.target }}" 
-          }
-        working-directory: server/target/${{ matrix.target }}/release
+          cd src-plugin
+            pnpm build
+          cd ..
 
-      - name: Upload server artifact
-        uses: actions/upload-artifact@v5
+          pnpm install
+        working-directory: client
+
+      - name: Build Chat App
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: server-${{ matrix.target }}
-          path: ./server/target/${{ matrix.target }}/release/ahqai-server*
-
-      - name: Upload Binaries
-        uses: AButler/upload-release-assets@v3.0
-        with:
-          files: |
-            ./server/target/${{ matrix.target }}/release/ahqai-server*
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          release-id: ${{ needs.create.outputs.release_id }}
+          releaseId: ${{ needs.create.outputs.release_id }}
+          args: --target ${{ matrix.os }}
 
   publish:
     name: Publish release
 
-    needs: [create, build]
+    needs: [create, build-desktop]
     if: success()
 
     runs-on: ubuntu-latest
@@ -137,7 +132,7 @@ jobs:
   delete:
     name: Delete release in failure
 
-    needs: [create, build]
+    needs: [create, build-desktop]
     if: failure()
 
     runs-on: ubuntu-latest

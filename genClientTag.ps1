@@ -1,10 +1,10 @@
 Install-Module -Name PSToml -Force -SkipPublisherCheck -AcceptLicense -Scope CurrentUser -ErrorAction Continue
 
-$obj = ConvertFrom-Toml (Get-Content "./server/Cargo.toml")
+$obj = ConvertFrom-Toml (Get-Content "./client/src-tauri/Cargo.toml")
 
 $version = $obj.package.version
 
-$suffix = Get-Date -Format "yyyy-MM-dd.HH:mm:ss"
+$suffix = Get-Date -Format "yyyy.MM.dd.HH.mm.ss"
 
 $out = $version
 
