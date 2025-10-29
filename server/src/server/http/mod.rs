@@ -1,6 +1,6 @@
-use actix_web::{HttpResponse, Responder, Result, get, http::header::ContentType, web::Bytes};
+use actix_web::{HttpResponse, Responder, Result, get, http::header::ContentType, post, web::Bytes};
 
-use crate::server::{AUTH, http::structs::ROOT_RESPONSE_DATA};
+use crate::{auth::AGENT, server::{AUTH, http::structs::ROOT_RESPONSE_DATA}};
 
 pub mod structs;
 
@@ -28,5 +28,13 @@ async fn me(payload: Bytes) -> Result<impl Responder> {
       }
     }
     _ => Ok(HttpResponse::BadRequest().body::<&[u8]>(br#"{ "msg": "Bad Request" }"#)),
+  }
+}
+
+#[post("/challenge")]
+async fn challenge(payload: Bytes) -> Result<impl Responder> {
+  match AGENT.gen_signature(&payload).await {
+    Some(x) => Ok(HttpResponse::Ok().body(x.to_vec())),
+    _ => Ok(HttpResponse::InternalServerError().body::<&[u8]>(br#"{ "msg": "Unable to hash" }"#))
   }
 }

@@ -10,12 +10,18 @@ use rand::{Rng, seq::IndexedRandom};
 use serde_json::Deserializer;
 use std::{
   io::{BufReader, Write},
-  sync::Arc,
+  sync::{Arc, LazyLock},
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::{fs::File, task::spawn_blocking};
 
 pub mod hash;
+
+pub static INTEGRITY_KEY: &'static [u8; 32] = include_bytes!("./key.bin");
+
+pub static AGENT: LazyLock<HashingAgent> = LazyLock::new(|| {
+  HashingAgent::new()
+});
 
 const TOKEN_ID_LENGTH: usize = 12;
 
@@ -24,7 +30,7 @@ pub struct AuthSessionManager {
   // UserID -> session token
   sessions: Cache<Box<str>, Arc<Box<str>>>,
   accounts: Cache<Box<str>, Arc<Box<str>>>,
-  agent: HashingAgent,
+  agent: &'static HashingAgent,
 }
 
 pub enum AccountCreateOutcome {
@@ -68,7 +74,7 @@ impl AuthSessionManager {
     Self {
       sessions,
       accounts,
-      agent: HashingAgent::new(),
+      agent: &*AGENT,
     }
   }
 

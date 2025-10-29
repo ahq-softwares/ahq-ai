@@ -1,10 +1,11 @@
 use bcrypt::{hash, verify};
 use crossbeam_channel::{Sender, bounded};
+use ed25519_dalek::{Signature, SigningKey, ed25519::signature::SignerMut};
 use std::thread;
 use std::thread::available_parallelism;
 use tokio::sync::oneshot::{Sender as OneshotSender, channel};
 
-use crate::structs::BCRYPT_COST;
+use crate::{auth::INTEGRITY_KEY, structs::BCRYPT_COST};
 
 pub struct HashingAgent(Sender<HashResp>);
 
@@ -18,6 +19,10 @@ pub enum HashResp {
     pass: String,
     tx: OneshotSender<Option<String>>,
   },
+  Challenge {
+    bytes: Vec<u8>,
+    tx: OneshotSender<Option<Signature>>,
+  }
 }
 
 impl HashingAgent {
@@ -31,6 +36,8 @@ impl HashingAgent {
     for _ in 0..threads {
       let rxc = rx.clone();
       thread::spawn(move || {
+        let mut signer = SigningKey::from_bytes(INTEGRITY_KEY);
+        
         while let Ok(x) = rxc.recv() {
           match x {
             HashResp::GenHash { pass, tx } => {
@@ -38,6 +45,9 @@ impl HashingAgent {
             }
             HashResp::CheckHash { pass, hash, tx } => {
               _ = tx.send(verify(&pass, &hash).ok());
+            }
+            HashResp::Challenge { bytes, tx } => {
+              _ = tx.send(signer.try_sign(&bytes).ok())
             }
           }
         }
@@ -82,6 +92,22 @@ impl HashingAgent {
     let (tx, rx) = channel::<Option<String>>();
 
     self.0.try_send(HashResp::GenHash { pass, tx }).ok()?;
+
+    rx.await.ok()?
+  }
+
+    /// # Returns
+  /// This function returns None in case of the server's queue being maxed out
+  pub async fn gen_signature(&self, data: &[u8]) -> Option<Signature> {
+    if self.0.is_full() {
+      return None;
+    }
+
+    let bytes = data.to_owned();
+
+    let (tx, rx) = channel::<Option<Signature>>();
+
+    self.0.try_send(HashResp::Challenge { bytes, tx }).ok()?;
 
     rx.await.ok()?
   }

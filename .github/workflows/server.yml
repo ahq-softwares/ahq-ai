@@ -7,6 +7,7 @@ on:
       - server-v*
     paths:
       - server/**
+      - .github/**
 
 permissions: write-all
 
@@ -17,12 +18,16 @@ jobs:
     outputs:
       upload_url: ${{ steps.rel.outputs.upload_url }}
       release_id: ${{ steps.rel.outputs.id }}
+      app_version: ${{ steps.tag.outputs.out }}
 
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Setup NodeJS
+        uses: actions/setup-node@v5
 
       - name: Get Tag Data
         shell: pwsh
@@ -31,6 +36,21 @@ jobs:
           ./genServerTag.ps1
         env:
           BRANCH_NAME: ${{ github.ref_name }}
+
+      - name: Generate Cryptographically Safe Public Key
+        run: |
+          node crypto.js
+        env:
+          SEED: ${{ secrets.SERVER_INTEGRITY_SEED }}
+          VERSION: ${{ steps.tag.outputs.out }}
+        working-directory: keygen
+
+      - name: Commit Public Key
+        uses: EndBug/add-and-commit@v9
+        with:
+          message: "Update cryptography public keys"
+          add: "./docs/src/public/keys.json"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Release
         uses: softprops/action-gh-release@v2
@@ -84,6 +104,17 @@ jobs:
           toolchain: nightly
           target: ${{ matrix.target }}
           components: rustfmt
+
+      - name: Setup NodeJS
+        uses: actions/setup-node@v5
+
+      - name: Generate Cryptographically Safe Public Key
+        run: |
+          node crypto.js
+        env:
+          SEED: ${{ secrets.SERVER_INTEGRITY_SEED }}
+          VERSION: ${{ needs.create.outputs.app_version }}
+        working-directory: keygen
 
       - name: Build Server
         shell: pwsh

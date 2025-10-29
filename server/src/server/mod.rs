@@ -85,12 +85,14 @@ pub async fn main() -> std::io::Result<()> {
   let mut server = HttpServer::new(move || {
     let mut app = App::new()
       .service(http::index)
-      .route("/chat", web::get().to(chat::chat));
+      .route("/chat", web::get().to(chat::chat))
+      .service(http::challenge)
+      .service(http::me);
 
     let auth = !matches!(CONFIG.authentication, Authentication::OpenToAll);
 
     if auth {
-      app = app.service(auth::auth).service(http::me);
+      app = app.service(auth::auth);
     }
 
     if registration_api {
