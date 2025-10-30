@@ -86,6 +86,17 @@ async function run() {
 
     const keys = client.db("keys").collection("keys");
 
+    const key = await keys.findOne({
+      $where: {
+        _id: APP_VERSION,
+      },
+    });
+
+    if (key) {
+      console.log("KEY ALREADY EXISTS. NO NEED TO UPDATE");
+      return;
+    }
+
     await keys.updateMany(
       {
         expiryDate: {
