@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-check-resp-integrity"
+description = "Enables the check_resp_integrity command without any pre-configured scope."
+commands.allow = ["check_resp_integrity"]
+
+[[permission]]
+identifier = "deny-check-resp-integrity"
+description = "Denies the check_resp_integrity command without any pre-configured scope."
+commands.deny = ["check_resp_integrity"]

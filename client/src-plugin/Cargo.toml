@@ -17,5 +17,9 @@ tauri = { version = "^2" }
 serde = "^1"
 thiserror = "^2"
 
+# Encryption Scheme
+ed25519-dalek = "^2"
+base64 = "^0.22"
+
 [build-dependencies]
 tauri-plugin = { version = "^2", features = ["build"] }

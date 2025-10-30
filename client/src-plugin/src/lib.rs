@@ -37,13 +37,16 @@ impl<R: Runtime, T: Manager<R>> crate::AhqaiExt<R> for T {
 /// Initializes the plugin.
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
   Builder::new("ahqai")
-    .invoke_handler(tauri::generate_handler![])
+    .invoke_handler(tauri::generate_handler![
+      commands::check_file_integrity,
+      commands::check_resp_integrity
+    ])
     .setup(|app, api| {
       #[cfg(mobile)]
       let ahqai = mobile::init(app, api)?;
       #[cfg(desktop)]
       let ahqai = desktop::init(app, api)?;
-      
+
       app.manage(ahqai);
       Ok(())
     })

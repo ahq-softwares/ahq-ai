@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-check-file-integrity"
+description = "Enables the check_file_integrity command without any pre-configured scope."
+commands.allow = ["check_file_integrity"]
+
+[[permission]]
+identifier = "deny-check-file-integrity"
+description = "Denies the check_file_integrity command without any pre-configured scope."
+commands.deny = ["check_file_integrity"]

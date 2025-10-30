@@ -12,6 +12,4 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
 
 pub struct Ahqai<R: Runtime>(AppHandle<R>);
 
-impl<R: Runtime> Ahqai<R> {
-
-}
+impl<R: Runtime> Ahqai<R> {}
