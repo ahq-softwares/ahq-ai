@@ -18,7 +18,7 @@ if (MASTER_SECRET_SEED == FALLBACK) {
   console.log("--------------------------------------------------");
 }
 
-const APP_VERSION = process.env.VERSION || "v0.1.0";
+const APP_VERSION = process.env.VERSION || "v0.1.1";
 
 function deriveDeterministicSeed(masterSeed, appVersion) {
   const inputString = `${masterSeed}_${appVersion}`;
@@ -79,9 +79,27 @@ async function run() {
   });
 
   try {
+    const twoMonthsInMSeconds = 60 * 24 * 60 * 60 * 1000; // Approx. 60 days
+    const futureDate = new Date(Date.now() + twoMonthsInMSeconds);
+
     await client.connect();
 
-    await client.db("keys").collection("keys").insertOne({
+    const keys = client.db("keys").collection("keys");
+
+    await keys.updateMany(
+      {
+        expiryDate: {
+          $exists: false,
+        },
+      },
+      {
+        $set: {
+          expiryDate: futureDate,
+        },
+      }
+    );
+
+    await keys.insertOne({
       _id: APP_VERSION,
       key: base64Key,
     });

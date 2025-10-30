@@ -33,11 +33,18 @@ async function run() {
           return {
             id: data._id,
             key: data.key,
+            /**
+             * @type {Date}
+             */
+            expiryDate: data.expiryDate,
           };
         })
         .toArray()
     ).forEach((obj) => {
-      initial[obj.id] = obj.key;
+      initial[obj.id] = {
+        pubkey: obj.key,
+        expiry: obj.expiryDate?.toUTCString(),
+      };
     });
   } catch (e) {
     console.error(e);
