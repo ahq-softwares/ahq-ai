@@ -7,7 +7,8 @@ on:
       - server-v*
     paths:
       - server/**
-      - .github/**
+      - .github/workflows/server.yml
+      - .github/workflows/pages.yml
       - genServerTag.ps1
       - keygen/**
 

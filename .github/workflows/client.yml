@@ -145,6 +145,8 @@ jobs:
           includeRelease: true
 
   build-android:
+    needs: [create]
+
     name: Build Client (Android)
 
     runs-on: ubuntu-24.04
@@ -186,13 +188,14 @@ jobs:
           cd ..
         working-directory: client
 
-      - name: setup Android signing
+      - name: Setup Android Signing
         run: |
           cd src-tauri/gen/android
           echo "keyAlias=upload" > keystore.properties
           echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
           base64 -d <<< "${{ secrets.ANDROID_KEY_BASE64 }}" > $RUNNER_TEMP/keystore.jks
           echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
+        working-directory: client
 
       - name: Build Chat App
         shell: pwsh
@@ -201,6 +204,7 @@ jobs:
           $env:NDK_HOME="$env:ANDROID_NDK_LATEST_HOME"
 
           pnpm tauri android build ${{ matrix.args }}
+        working-directory: client
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
