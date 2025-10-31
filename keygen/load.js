@@ -65,7 +65,7 @@ async function run() {
     output
   );
 
-  const signer = crypto.createSign("ed25519"); // Note: digest is omitted here, or use 'null'
+  const signer = crypto.createSign(); // Note: digest is omitted here, or use 'null'
   signer.update(output);
   signer.end();
 
