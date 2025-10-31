@@ -68,7 +68,7 @@ async function run() {
   fs.writeFileSync(
     path.join(__dirname, "../docs/src/public/keys.integrity"),
     // Raw Buffer Directly
-    crypto.sign(null, dataToSign, privateKeyObject)
+    crypto.sign(null, output, privateKeyObject)
   );
 }
 
