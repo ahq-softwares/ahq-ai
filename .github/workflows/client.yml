@@ -156,8 +156,8 @@ jobs:
       matrix:
         include:
           - args: --split-per-abi
-          - args: --target aarch64,armv7
-          - args: --target aarch64,armv7,i686,x86_64
+          - args: --target aarch64 armv7
+          - args: --target aarch64 armv7 i686 x86_64
 
     steps:
       - name: Checkout
@@ -231,7 +231,7 @@ jobs:
   delete:
     name: Delete release in failure
 
-    needs: [create, build-desktop]
+    needs: [create, build-desktop, build-android]
     if: failure()
 
     runs-on: ubuntu-latest
