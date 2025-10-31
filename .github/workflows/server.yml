@@ -9,6 +9,7 @@ on:
       - server/**
       - .github/**
       - genServerTag.ps1
+      - keygen/**
 
 permissions: write-all
 

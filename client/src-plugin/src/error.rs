@@ -13,6 +13,9 @@ pub enum Error {
   SliceError(#[from] TryFromSliceError),
 
   #[error(transparent)]
+  TauriError(#[from] tauri::Error),
+
+  #[error(transparent)]
   EdError(#[from] ed25519_dalek::SignatureError),
 
   #[cfg(mobile)]

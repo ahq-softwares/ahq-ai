@@ -20,7 +20,6 @@ export default function Settings() {
     <ResponsiveDialog
       open={open}
       setOpen={setOpen}
-      button={<></>}
       buttonVariant={"ghost"}
       title="Add Server"
       description="Enter the server information with required credentials"
@@ -96,6 +95,6 @@ export default function Settings() {
       </div>
     </Category>
 
-    <h1 className="text-lg mt-10 mb-1">Advanced Settings</h1>
+    <h1 className="text-lg mt-3 mb-1">Advanced Settings</h1>
   </>;
 }

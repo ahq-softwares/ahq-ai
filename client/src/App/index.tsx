@@ -5,6 +5,7 @@ import Splash from "./Splash";
 import { ThemeContext } from "./theme";
 import { initStore } from "./store";
 import Application from "./App";
+import { getKeys } from "./server/key";
 
 export const PageId = {
   Splash: 0,
@@ -14,12 +15,20 @@ export const PageId = {
 export default function App() {
   const [page, setPage] = useState(PageId.Splash);
 
+  const [, showDangerScreen] = useState(false);
+
   useEffect(() => {
     (async () => {
       // Show the window when its ready
       try {
         await initStore();
         await getCurrentWebviewWindow().show();
+        try {
+          await getKeys();
+        } catch (e) {
+          console.error(e);
+          showDangerScreen(true);
+        }
 
         setTimeout(() => {
           setPage(PageId.Home);

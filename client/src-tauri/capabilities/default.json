@@ -39,6 +39,7 @@
           "path": "$APPDATA/*"
         }
       ]
-    }
+    },
+    "ahqai:default"
   ]
 }

@@ -1,5 +1,6 @@
 import { fetch } from "@tauri-apps/plugin-http";
 import { satisfies } from "semver"
+import { getKeys } from "./key";
 
 export const supportedServerSemver = "0.x";
 
@@ -28,6 +29,8 @@ export class HTTPServer {
   }
 
   async getFlags() {
+    await getKeys();
+
     let out = 0;
 
     let output;

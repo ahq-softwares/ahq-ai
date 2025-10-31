@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/drawer"
 
 interface DialogProps {
-  button: React.ReactNode;
+  button?: React.ReactNode;
   triggerButtonOverrides?: boolean;
   buttonVariant: "link" | "default" | "destructive" | "outline" | "secondary" | "ghost" | null | undefined;
   title?: string;
@@ -51,9 +51,9 @@ export function ResponsiveDialog(
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
+        {button && <DialogTrigger asChild>
           {triggerButtonOverrides ? button : <Button variant={buttonVariant}>{button}</Button>}
-        </DialogTrigger>
+        </DialogTrigger>}
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
@@ -69,9 +69,9 @@ export function ResponsiveDialog(
 
   return (
     <Drawer open={open} onOpenChange={setOpen}>
-      <DrawerTrigger asChild>
+      {button && <DrawerTrigger asChild>
         {triggerButtonOverrides ? button : <Button variant={buttonVariant}>{button}</Button>}
-      </DrawerTrigger>
+      </DrawerTrigger>}
       <DrawerContent>
         <DrawerHeader className="text-left">
           <DrawerTitle>{title}</DrawerTitle>

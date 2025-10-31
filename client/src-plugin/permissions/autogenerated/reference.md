@@ -2,6 +2,11 @@
 
 Default permissions for the plugin
 
+#### This default permission set includes the following:
+
+- `allow-check-file-integrity`
+- `allow-check-resp-integrity`
+
 ## Permission Table
 
 <table>
