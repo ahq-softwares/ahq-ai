@@ -65,15 +65,10 @@ async function run() {
     output
   );
 
-  const signer = crypto.createSign(); // Note: digest is omitted here, or use 'null'
-  signer.update(output);
-  signer.end();
-
-  const outbuffer = signer.sign(privateKeyObject);
-
   fs.writeFileSync(
     path.join(__dirname, "../docs/src/public/keys.integrity"),
-    outbuffer
+    // Raw Buffer Directly
+    crypto.sign(null, dataToSign, privateKeyObject)
   );
 }
 
