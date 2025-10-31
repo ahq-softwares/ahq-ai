@@ -46,16 +46,16 @@
     ],
     "windows": {
       "allowDowngrades": false,
-      "certificateThumbprint": null,
-      "digestAlgorithm": null,
       "nsis": null,
       "signCommand": null,
-      "timestampUrl": null,
       "tsp": false,
       "webviewInstallMode": {
         "silent": true,
         "type": "downloadBootstrapper"
       },
+      "certificateThumbprint": "759C346911E2F16EEFD1B998D9967A327489841B",
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "http://timestamp.comodoca.com",
       "wix": {}
     },
     "copyright": "AHQ Softwares",

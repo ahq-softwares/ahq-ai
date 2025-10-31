@@ -5,8 +5,9 @@ on:
     branches:
       - main
       - client-v*
-    # paths:
-    # - client/**
+    paths:
+      - client/**
+      - .github/workflows/client.yml
 
 permissions: write-all
 
@@ -118,6 +119,18 @@ jobs:
           cd ..
         working-directory: client
 
+      - name: Import Windows Certificate
+        if: runner.os == 'Windows'
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          New-Item -ItemType directory -Path certificate
+          Set-Content -Path certificate/tempCert.txt -Value $env:WINDOWS_CERTIFICATE
+          certutil -decode certificate/tempCert.txt certificate/certificate.pfx
+          Remove-Item -path certificate -include tempCert.txt
+          Import-PfxCertificate -FilePath certificate/certificate.pfx -CertStoreLocation Cert:\CurrentUser\My -Password (ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText)
+
       - name: Build Chat App
         uses: tauri-apps/tauri-action@v0
         env:
@@ -131,10 +144,70 @@ jobs:
           includeDebug: true
           includeRelease: true
 
+  build-android:
+    name: Build Client (Android)
+
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - args: --split-per-abi
+          - args: --target aarch64,armv7
+          - args: --target aarch64,armv7,i686,x86_64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup NodeJS
+        uses: actions/setup-node@v5
+        with:
+          node-version: ">=24"
+
+      - name: Setup Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly
+          target: aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+
+      - name: Build frontend
+        run: |
+          npm i -g pnpm
+
+          pnpm install
+
+          cd src-plugin
+            pnpm install
+            pnpm add -D rollup
+
+            pnpm build
+          cd ..
+        working-directory: client
+
+      - name: setup Android signing
+        run: |
+          cd src-tauri/gen/android
+          echo "keyAlias=upload" > keystore.properties
+          echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
+          base64 -d <<< "${{ secrets.ANDROID_KEY_BASE64 }}" > $RUNNER_TEMP/keystore.jks
+          echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
+
+      - name: Build Chat App
+        shell: pwsh
+        run: |
+          $env:JAVA_HOME="$env:JAVA_HOME_17_X64"
+          $env:NDK_HOME="$env:ANDROID_NDK_LATEST_HOME"
+
+          pnpm tauri android build ${{ matrix.args }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   publish:
     name: Publish release
 
-    needs: [create, build-desktop]
+    needs: [create, build-desktop, build-android]
     if: success()
 
     runs-on: ubuntu-latest
