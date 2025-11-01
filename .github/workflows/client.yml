@@ -268,13 +268,6 @@ jobs:
 
     runs-on: macos-latest
 
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - args: --debug
-          - args: ""
-
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -307,8 +300,8 @@ jobs:
       - name: Build Chat App
         shell: pwsh
         run: |
-          pnpm tauri ios build ${{ matrix.args }}
-          pnpm tauri ios build --debug ${{ matrix.args }}
+          pnpm tauri ios build
+          pnpm tauri ios build --debug
         working-directory: client
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
