@@ -261,66 +261,10 @@ jobs:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           release-id: ${{ needs.create.outputs.release_id }}
 
-  build-ios:
-    needs: [create]
-
-    name: Build Client (iOS)
-
-    continue-on-error: true
-
-    runs-on: macos-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup NodeJS
-        uses: actions/setup-node@v5
-        with:
-          node-version: ">=24"
-
-      - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: nightly
-          target: aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
-
-      - name: Build frontend
-        run: |
-          npm i -g pnpm
-
-          pnpm install
-
-          cd src-plugin
-            pnpm install
-            pnpm add -D rollup
-
-            pnpm build
-          cd ..
-        working-directory: client
-
-      - name: Build Chat App
-        shell: pwsh
-        run: |
-          pnpm tauri ios build --help
-
-          pnpm tauri ios build --target aarch64-sim --export-method debugging --debug
-        working-directory: client
-        env:
-          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # - name: Upload Binaries
-      #   uses: AButler/upload-release-assets@v3.0
-      #   with:
-      #     files: client/src-tauri/gen/android/app/build/outputs/**/app*.aab;client/src-tauri/gen/android/app/build/outputs/**/app*.apk
-      #     repo-token: ${{ secrets.GITHUB_TOKEN }}
-      #     release-id: ${{ needs.create.outputs.release_id }}
-
   publish:
     name: Publish release
 
-    needs: [create, build-desktop, build-android, build-ios]
+    needs: [create, build-desktop, build-android]
     if: success()
 
     runs-on: ubuntu-latest
@@ -340,7 +284,7 @@ jobs:
   delete:
     name: Delete release in failure
 
-    needs: [create, build-desktop, build-android, build-ios]
+    needs: [create, build-desktop, build-android]
     if: failure()
 
     runs-on: ubuntu-latest
