@@ -257,9 +257,7 @@ jobs:
       - name: Upload Binaries
         uses: AButler/upload-release-assets@v3.0
         with:
-          files: |
-            ./client/src-tauri/gen/android/app/build/outputs/apk/*/*/app*
-            ./client/src-tauri/gen/android/app/build/outputs/bundle/*/app*
+          files: "client/src-tauri/gen/android/app/build/outputs/**"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           release-id: ${{ needs.create.outputs.release_id }}
 
