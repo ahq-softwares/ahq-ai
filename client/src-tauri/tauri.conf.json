@@ -58,6 +58,9 @@
       "timestampUrl": "http://timestamp.comodoca.com",
       "wix": {}
     },
+    "iOS": {
+      "minimumSystemVersion": "14.0"
+    },
     "copyright": "AHQ Softwares",
     "category": "Productivity",
     "createUpdaterArtifacts": true,

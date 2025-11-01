@@ -300,15 +300,12 @@ jobs:
       - name: Build Chat App
         shell: pwsh
         run: |
-          $env:CODE_SIGN_IDENTITY=""
-          $env:CODE_SIGNING_REQUIRED="NO"
-          $env:CODE_SIGNING_ALLOWED="NO"
-
           pnpm tauri ios build --help
-          pnpm tauri ios build --target aarch64-sim
-          pnpm tauri ios build --debug --target aarch64-sim
+          pnpm tauri ios build
+          pnpm tauri ios build --debug
         working-directory: client
         env:
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # - name: Upload Binaries
