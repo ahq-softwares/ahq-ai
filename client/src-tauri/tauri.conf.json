@@ -53,7 +53,7 @@
         "silent": true,
         "type": "downloadBootstrapper"
       },
-      "certificateThumbprint": "236121b806cec4e0cfcc92c4bc8f1c51fd27befc",
+      "certificateThumbprint": "07184985966f6e56d1f3d6dff88a3080517f6041",
       "digestAlgorithm": "sha256",
       "timestampUrl": "http://timestamp.comodoca.com",
       "wix": {}
