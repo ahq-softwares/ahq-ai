@@ -8,11 +8,6 @@ import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import app.tauri.plugin.Invoke
 
-@InvokeArg
-class PingArgs {
-  var value: String? = null
-}
-
 @TauriPlugin
 class AhqAi(private val activity: Activity): Plugin(activity) {
 
