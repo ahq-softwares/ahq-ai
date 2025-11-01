@@ -304,8 +304,9 @@ jobs:
           $env:CODE_SIGNING_REQUIRED="NO"
           $env:CODE_SIGNING_ALLOWED="NO"
 
-          pnpm tauri ios build --target iphonesimulator
-          pnpm tauri ios build --debug --target iphonesimulator
+          pnpm tauri ios build --help
+          pnpm tauri ios build --target aarch64-sim
+          pnpm tauri ios build --debug --target aarch64-sim
         working-directory: client
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
