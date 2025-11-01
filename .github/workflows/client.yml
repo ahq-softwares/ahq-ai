@@ -303,8 +303,8 @@ jobs:
         shell: pwsh
         run: |
           pnpm tauri ios build --help
-          pnpm tauri ios build --export-method debugging
-          pnpm tauri ios build --export-method debugging --debug
+
+          pnpm tauri ios build --target aarch64-sim --export-method debugging --debug
         working-directory: client
         env:
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
