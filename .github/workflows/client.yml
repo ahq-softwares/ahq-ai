@@ -156,9 +156,13 @@ jobs:
       matrix:
         include:
           - args: --split-per-abi
+            target: ""
+
           - args: --target aarch64 armv7
             target: arm-mobile
+
           - args: --target aarch64 armv7 i686 x86_64
+            target: ""
 
     steps:
       - name: Checkout
@@ -204,8 +208,8 @@ jobs:
           $env:JAVA_HOME="$env:JAVA_HOME_17_X64"
           $env:NDK_HOME="$env:ANDROID_NDK_LATEST_HOME"
 
-          pnpm tauri android build --apk ${{ matrix.args }}
-          pnpm tauri android build --apk --debug ${{ matrix.args }}
+          pnpm tauri android build ${{ matrix.args }}
+          pnpm tauri android build --debug ${{ matrix.args }}
         working-directory: client
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
