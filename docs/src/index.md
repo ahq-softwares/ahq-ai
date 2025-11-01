@@ -17,7 +17,7 @@ hero:
 
     - theme: alt
       text: Docs
-      link: /docs
+      link: /docs/
 
 features:
   - title: Open Sourced

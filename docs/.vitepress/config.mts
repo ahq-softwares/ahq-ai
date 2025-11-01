@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitepress'
+import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
@@ -10,11 +11,17 @@ export default defineConfig({
   head: [
     ['link', { rel: 'icon', href: '/ahq-ai/icon.png', type: 'image/png' }],
   ],
+  markdown: {
+    config(md) {
+      md.use(tabsMarkdownPlugin)
+    },
+  },
   themeConfig: {
     logo: "/icon.png",
     lastUpdated: {
       text: "Last Updated "
     },
+    outline: [2, 3],
     search: {
       provider: "local"
     },
@@ -28,7 +35,7 @@ export default defineConfig({
     nav: [
       { text: 'Home', link: '/' },
       { text: 'Download', link: '/download.md' },
-      { text: 'Docs', link: '/docs.md' },
+      { text: 'Docs', link: '/docs' },
     ],
 
     sidebar: [
@@ -40,9 +47,10 @@ export default defineConfig({
         text: 'Docs',
         collapsed: false,
         items: [
-          { text: "Introduction", link: "/docs.md" },
-          { text: "Server Setup", link: "/serversetup.md" },
-          { text: "Client Setup", link: "/clientsetup.md" },
+          { text: "Introduction", link: "/docs/index.md" },
+          { text: "Building for IOS", link: "/docs/iossetup.md" },
+          { text: "Server Setup", link: "/docs/serversetup.md" },
+          { text: "Client Setup", link: "/docs/clientsetup.md" },
         ]
       }
     ],
