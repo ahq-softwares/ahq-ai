@@ -157,6 +157,7 @@ jobs:
         include:
           - args: --split-per-abi
           - args: --target aarch64 armv7
+            target: arm-mobile
           - args: --target aarch64 armv7 i686 x86_64
 
     steps:
@@ -203,10 +204,60 @@ jobs:
           $env:JAVA_HOME="$env:JAVA_HOME_17_X64"
           $env:NDK_HOME="$env:ANDROID_NDK_LATEST_HOME"
 
-          pnpm tauri android build ${{ matrix.args }}
+          pnpm tauri android build --apk ${{ matrix.args }}
+          pnpm tauri android build --apk --debug ${{ matrix.args }}
         working-directory: client
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rename File (APK Release)
+        shell: pwsh
+        if: matrix.target != ''
+        run: |
+          Get-ChildItem -Path . -Filter "app-universal-release*" | 
+          Rename-Item -NewName { 
+            $_.Name -replace '^app-universal-release', "app-${{ matrix.target }}-release" 
+          }
+        working-directory: client/src-tauri/gen/android/app/build/outputs/apk/universal/release
+
+      - name: Rename File (APK Debug)
+        shell: pwsh
+        if: matrix.target != ''
+        run: |
+          Get-ChildItem -Path . -Filter "app-universal-debug*" | 
+          Rename-Item -NewName { 
+            $_.Name -replace '^app-universal-debug', "app-${{ matrix.target }}-debug" 
+          }
+        working-directory: client/src-tauri/gen/android/app/build/outputs/apk/universal/debug
+
+      - name: Rename File (AAB Release)
+        shell: pwsh
+        if: matrix.target != ''
+        run: |
+          Get-ChildItem -Path . -Filter "app-universal-release*" | 
+          Rename-Item -NewName { 
+            $_.Name -replace '^app-universal-release', "app-${{ matrix.target }}-release" 
+          }
+        working-directory: client/src-tauri/gen/android/app/build/outputs/bundle/universalRelease/
+
+      - name: Rename File (AAB Debug)
+        shell: pwsh
+        if: matrix.target != ''
+        run: |
+          Get-ChildItem -Path . -Filter "app-universal-debug*" | 
+          Rename-Item -NewName { 
+            $_.Name -replace '^app-universal-debug', "app-${{ matrix.target }}-debug" 
+          }
+        working-directory: client/src-tauri/gen/android/app/build/outputs/bundle/universalDebug/
+
+      - name: Upload Binaries
+        uses: AButler/upload-release-assets@v3.0
+        with:
+          files: |
+            ./client/src-tauri/gen/android/app/build/outputs/apk/*/*/app*
+            ./client/src-tauri/gen/android/app/build/outputs/bundle/*/app*
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          release-id: ${{ needs.create.outputs.release_id }}
 
   publish:
     name: Publish release
