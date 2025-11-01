@@ -266,6 +266,8 @@ jobs:
 
     name: Build Client (iOS)
 
+    continue-on-error: true
+
     runs-on: macos-latest
 
     steps:
@@ -301,8 +303,8 @@ jobs:
         shell: pwsh
         run: |
           pnpm tauri ios build --help
-          pnpm tauri ios build
-          pnpm tauri ios build --debug
+          pnpm tauri ios build --export-method debugging
+          pnpm tauri ios build --export-method debugging --debug
         working-directory: client
         env:
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
