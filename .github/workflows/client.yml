@@ -300,6 +300,10 @@ jobs:
       - name: Build Chat App
         shell: pwsh
         run: |
+          export CODE_SIGN_IDENTITY=""
+          export CODE_SIGNING_REQUIRED="NO"
+          export CODE_SIGNING_ALLOWED="NO"
+
           pnpm tauri ios build
           pnpm tauri ios build --debug
         working-directory: client
