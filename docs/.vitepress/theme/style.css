@@ -167,9 +167,10 @@
 }
 
 .dontknow {
+  margin-left: auto;
   display: block;
-  padding: 5px 20px;
-  background: var(--vp-c-default-3);
+  padding: 0px 5px;
+  background: var(--vp-c-border) !important;
   border-radius: 5px;
   transition: all 0.25s;
   border: 1px solid var(--vp-c-border) !important;

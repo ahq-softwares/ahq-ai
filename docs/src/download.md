@@ -269,14 +269,22 @@ AHQ AI has a decentralized client server architecture.
 
 :::tabs key:os
 == Windows
+### Certificate
+
+AHQ AI Client provides a self signed certificate on Windows, which will be available to be installed quite soon.
+
+### Download
+
 <span>Fill the parameters and download button will be shown, if build is available</span>
-<button @click="windowsAutoFill()" class="dontknow">Autofill Dropdowns</button>
-<div class="responsive-grid" style="width:100%;gap:10px;margin-bottom:30px;">
+<div class="responsive-grid" style="width:100%;gap:10px;margin-bottom:5px;">
   <Select v-model="channel" :options="channelOpt" placeholder="Select Channel" />
 
   <Select v-model="appTypeRef" :options="appType" placeholder="Select Release" />
 
   <Select v-model="entry" :options="winArchOptions" placeholder="Select Architecture" />
+</div>
+<div style="display:flex;width:100%;margin-bottom:20px;">
+  <button @click="windowsAutoFill()" class="dontknow">Autofill Dropdowns</button>
 </div>
 <div style="width:100%;display:flex;flex-direction:column;">
   <span 
@@ -289,13 +297,15 @@ AHQ AI has a decentralized client server architecture.
 </div>
 == MacOS
 <span>Fill the parameters and download button will be shown, if build is available</span>
-<button @click="macAutoFill()" class="dontknow">Autofill Dropdowns</button>
-<div class="responsive-grid" style="width:100%;gap:10px;margin-bottom:30px;">
+<div class="responsive-grid" style="width:100%;gap:10px;margin-bottom:5px;">
   <Select v-model="channel" :options="channelOpt" placeholder="Select Channel" />
 
   <Select v-model="appTypeRef" :options="appType" placeholder="Select Release" />
 
   <Select v-model="entry" :options="macArchOptions" placeholder="Select Architecture" />
+</div>
+<div style="display:flex;width:100%;margin-bottom:20px;">
+  <button @click="macAutoFill()" class="dontknow">Autofill Dropdowns</button>
 </div>
 <div style="width:100%;display:flex;flex-direction:column;">
   <span 
@@ -328,13 +338,15 @@ AHQ AI has a decentralized client server architecture.
 </div>
 == Android
 <span>Fill the parameters and download button will be shown, if build is available</span>
-<button @click="androidAutoFill()" class="dontknow">Autofill Dropdowns</button>
-<div class="responsive-grid" style="width:100%;gap:10px;margin-bottom:30px;">
+<div class="responsive-grid" style="width:100%;gap:10px;margin-bottom:5px;">
   <Select v-model="channel" :options="channelOpt" placeholder="Select Channel" />
 
   <Select v-model="appTypeRef" :options="appType" placeholder="Select Release" />
 
   <Select v-model="entry" :options="androidArchOptions" placeholder="Select Arch" />
+</div>
+<div style="display:flex;width:100%;margin-bottom:20px;">
+  <button @click="androidAutoFill()" class="dontknow">Autofill Dropdowns</button>
 </div>
 <div style="width:100%;display:flex;flex-direction:column;">
 <span 
