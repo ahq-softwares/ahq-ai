@@ -358,7 +358,7 @@ Both are client and server has two types of releases:
 </div>
 == MacOS
 
-#### ⚠️ Requires Additional
+#### ⚠️ Requires Additional Steps
 Mac users need to follow a few additional steps. Refer to [AHQ AI Client for MacOS](/install/mac)
 
 #### Download
