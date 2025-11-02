@@ -45,6 +45,6 @@ If you distribute your modified software (your derivative), the entire work—in
 
 Because your **derivative must be under GPL-3.0 (or a compatible license), you are obligated to provide the corresponding source code** to anyone who receives the binary version of your derivative.
 
-This also means that you cannot create a derivative our project and convert it into a closed source, proprietary project with no source code available or under a different license. **Such malpractice might even lead to a legal lawsuit, so be informed.**
+This also means that you cannot create a derivative of our project and convert it into a closed source, proprietary project with no source code available or under a different license. **Such malpractice might even lead to a legal lawsuit, so be informed.**
 
 :::
