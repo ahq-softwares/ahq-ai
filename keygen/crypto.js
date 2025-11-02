@@ -87,9 +87,7 @@ async function run() {
     const keys = client.db("keys").collection("keys");
 
     const key = await keys.findOne({
-      $where: {
-        _id: APP_VERSION,
-      },
+      _id: APP_VERSION,
     });
 
     if (key && process.env.ALPHA == "true") {
