@@ -163,5 +163,5 @@
   display: grid;
   width: 100%;
   /* This is the magic line for responsiveness */
-  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }

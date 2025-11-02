@@ -118,11 +118,12 @@ const vClickOutside = {
   align-items: center;
   justify-content: space-between;
   min-width: 150px; /* Ensure a minimum width */
+  width: 100%;
   gap: 8px;
   padding: 8px 16px;
   border: 1px solid var(--vp-c-border);
   border-radius: 6px;
-  background-color: var(--vp-c-bg-alt); 
+  background-color: var(--vp-c-default-3); 
   color: var(--vp-c-text-1);
   font-size: 14px;
   font-weight: 500;
