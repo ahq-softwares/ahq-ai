@@ -12,7 +12,7 @@ const props = defineProps({
    */
   modelValue: {
     type: [String, Number],
-    required: true
+    required: false
   },
   /**
    * Array of options. Each object should have a 'text' (display) and 'value' (key) property.

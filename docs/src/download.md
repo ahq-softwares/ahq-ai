@@ -159,10 +159,61 @@ sidebar: false
     console.log(outValue);
   })()
 
-  const channel = ref();
-  const appTypeRef = ref();
+  const channel = ref("latest");
+  const appTypeRef = ref("release");
   const entry = ref();
   const bundle = ref();
+
+  const x64 = ["x86", "x64", "x86_64", "Win64"];
+  const arm64 = ["arm64", "aarch64", "arm"];
+
+  async function windowsAutoFill() {
+    let arch = "";
+
+    try {
+      arch = (await navigator?.userAgentData?.getHighEntropyValues(["architecture"])).architecture;
+
+    } catch (e) {
+      arch = navigator.userAgent;
+
+      console.warn(e);
+      console.log("Using fallback method");
+    }
+
+    if (arm64.some((d) => arch.toLowerCase().includes(d))) {
+      entry.value = "winArm"
+    } else if (x64.some((d) => arch.toLowerCase().includes(d))) {
+      entry.value = "winX64"
+    } else {
+      entry.value = "winX64"
+    }
+  }
+
+  async function macAutoFill() {
+    let arch = "";
+
+    try {
+      arch = (await navigator?.userAgentData?.getHighEntropyValues(["architecture"])).architecture;
+
+    } catch (e) {
+      arch = navigator.userAgent;
+
+      console.warn(e);
+      console.log("Using fallback method");
+    }
+
+    if (arm64.some((d) => arch.toLowerCase().includes(d))) {
+      entry.value = "macArm"
+    } else if (x64.some((d) => arch.toLowerCase().includes(d))) {
+      entry.value = "macX64"
+    } else {
+      entry.value = "macX64"
+    }
+  }
+
+  async function androidAutoFill() {
+    entry.value = "androidArmMobile"
+  }
 
   const channelOpt = [
     { text: 'Latest', value: 'latest' },
@@ -170,8 +221,8 @@ sidebar: false
   ]
 
   const appType = [
-    { text: 'Normal', value: 'release' },
-    { text: 'Debug', value: 'debug' },
+    { text: 'Normal release', value: 'release' },
+    { text: 'Debug release', value: 'debug' },
   ];
 
   const winArchOptions = [
@@ -219,6 +270,7 @@ AHQ AI has a decentralized client server architecture.
 :::tabs key:os
 == Windows
 <span>Fill the parameters and download button will be shown, if build is available</span>
+<button @click="windowsAutoFill()" class="dontknow">Autofill Dropdowns</button>
 <div class="responsive-grid" style="width:100%;gap:10px;margin-bottom:30px;">
   <Select v-model="channel" :options="channelOpt" placeholder="Select Channel" />
 
@@ -227,13 +279,17 @@ AHQ AI has a decentralized client server architecture.
   <Select v-model="entry" :options="winArchOptions" placeholder="Select Architecture" />
 </div>
 <div style="width:100%;display:flex;flex-direction:column;">
+  <span 
+  style="display:block;margin-left: auto;margin-right:auto;" 
+  v-if="channel && appTypeRef && entry && !releases.client?.[channel]?.[appTypeRef]?.[entry]">Unavailable</span>
   <a 
   style="display:block;margin-left: auto;margin-right:auto;" 
-  v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]"
+  v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]!=undefined"
   :href="releases.client?.[channel]?.[appTypeRef]?.[entry]">Download</a>
 </div>
 == MacOS
 <span>Fill the parameters and download button will be shown, if build is available</span>
+<button @click="macAutoFill()" class="dontknow">Autofill Dropdowns</button>
 <div class="responsive-grid" style="width:100%;gap:10px;margin-bottom:30px;">
   <Select v-model="channel" :options="channelOpt" placeholder="Select Channel" />
 
@@ -242,9 +298,12 @@ AHQ AI has a decentralized client server architecture.
   <Select v-model="entry" :options="macArchOptions" placeholder="Select Architecture" />
 </div>
 <div style="width:100%;display:flex;flex-direction:column;">
+  <span 
+  style="display:block;margin-left: auto;margin-right:auto;" 
+  v-if="channel && appTypeRef && entry && !releases.client?.[channel]?.[appTypeRef]?.[entry]">Unavailable</span>
   <a 
   style="display:block;margin-left: auto;margin-right:auto;" 
-  v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]"
+  v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]!=undefined"
   :href="releases.client?.[channel]?.[appTypeRef]?.[entry]">Download</a>
 </div>
 == Linux
@@ -259,13 +318,17 @@ AHQ AI has a decentralized client server architecture.
   <Select v-model="bundle" :options="linuxBundleOptions" placeholder="Select Bundle" />
 </div>
 <div style="width:100%;display:flex;flex-direction:column;">
+  <span 
+  style="display:block;margin-left: auto;margin-right:auto;" 
+  v-if="channel && appTypeRef && entry && !releases.client?.[channel]?.[appTypeRef]?.[entry]">Unavailable</span>
   <a 
   style="display:block;margin-left: auto;margin-right:auto;" 
-  v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]?.[bundle]"
-  :href="releases.client?.[channel]?.[appTypeRef]?.[entry]?.[bundle]">Download</a>
+  v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]!=undefined"
+  :href="releases.client?.[channel]?.[appTypeRef]?.[entry]">Download</a>
 </div>
 == Android
 <span>Fill the parameters and download button will be shown, if build is available</span>
+<button @click="androidAutoFill()" class="dontknow">Autofill Dropdowns</button>
 <div class="responsive-grid" style="width:100%;gap:10px;margin-bottom:30px;">
   <Select v-model="channel" :options="channelOpt" placeholder="Select Channel" />
 
@@ -274,11 +337,13 @@ AHQ AI has a decentralized client server architecture.
   <Select v-model="entry" :options="androidArchOptions" placeholder="Select Arch" />
 </div>
 <div style="width:100%;display:flex;flex-direction:column;">
+<span 
+  style="display:block;margin-left: auto;margin-right:auto;" 
+  v-if="channel && appTypeRef && entry && !releases.client?.[channel]?.[appTypeRef]?.[entry]">Unavailable</span>
   <a 
   style="display:block;margin-left: auto;margin-right:auto;" 
-  v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]"
-  :href="releases.client?.[channel]?.[appTypeRef]?.[entry]">Download</a>
-</div>
+  v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]!=undefined"
+  :href="releases.client?.[channel]?.[appTypeRef]?.[entry]">Download</a></div>
 == IOS
 Please read the guide [here](/docs/iossetup)
 :::

@@ -165,3 +165,16 @@
   /* This is the magic line for responsiveness */
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
+
+.dontknow {
+  display: block;
+  padding: 5px 20px;
+  background: var(--vp-c-default-3);
+  border-radius: 5px;
+  transition: all 0.25s;
+  border: 1px solid var(--vp-c-border) !important;
+}
+
+.dontknow:hover {
+  border: 1px solid var(--vp-c-brand-1) !important;
+}
