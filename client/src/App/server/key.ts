@@ -6,7 +6,7 @@ const AHQAI_TRUSTED_KEYS_INTEGRITY_URL = "https://ahq-softwares.github.io/ahq-ai
 
 const TWO_MINS_IN_SECS = 2 * 60;
 
-let keys = {};
+let keys: { [key: string]: { pubkey: string, expiry?: string } | undefined } = {};
 let old_danger = false;
 
 let expiry = 0;

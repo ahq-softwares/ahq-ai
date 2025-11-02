@@ -1,10 +1,10 @@
-import { HTTPServer } from "@/App/server";
+import { AuthType, HTTPServer, StatusFlags } from "@/App/server";
 import { ServersState } from "@/App/store/db/servers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-import { XCircle } from "lucide-react";
+import { XCircle, AlertCircle } from "lucide-react";
 import { useRef, useState } from "react";
 
 type ServerLoginState = "Initial" | "Connecting";
@@ -12,6 +12,7 @@ type ServerLoginState = "Initial" | "Connecting";
 export default function AddServer({ setOpen }: { setOpen: (_: boolean) => void }) {
   const [state, setState] = useState<ServerLoginState>("Initial");
   const [err, setErr] = useState<string | undefined>();
+  const [warn, setWarn] = useState<string | undefined>();
 
   const serverNameRef = useRef<HTMLInputElement>(null);
   const serverUrlRef = useRef<HTMLInputElement>(null);
@@ -27,35 +28,7 @@ export default function AddServer({ setOpen }: { setOpen: (_: boolean) => void }
           const serverFriendlyName = serverNameRef.current!!.value;
           const url = serverUrlRef.current!!.value;
 
-          (async () => {
-            try {
-              const server = new HTTPServer(url, "no-auth");
-
-              const flags = await server.getFlags();
-
-              // We need no type of authentication
-              if (flags == 0) {
-                ServersState.updateValueViaCallback((val) => {
-                  val.push({
-                    instance: server,
-                    session: "no-auth",
-                    name: serverFriendlyName,
-                    url: url,
-                    status: flags
-                  });
-
-                  return val;
-                });
-
-                setOpen(false);
-                return;
-              }
-            } catch (e) {
-              console.warn(e);
-              setErr("Something went wrong. Please check if everything is correct!");
-              setState("Initial");
-            }
-          })()
+          httpLoad(url, serverFriendlyName, setOpen, setErr, setWarn, setState);
         }}
       >
         <div className="w-full flex gap-5">
@@ -86,6 +59,13 @@ export default function AddServer({ setOpen }: { setOpen: (_: boolean) => void }
         </div>
       }
 
+      {warn &&
+        <div role="alert" className="dui-alert dui-alert-soft dui-alert-warn">
+          <AlertCircle />
+          <span>{warn}</span>
+        </div>
+      }
+
       {state == "Connecting" &&
         <div className="w-full flex text-center justify-center items-center gap-3 text-muted-foreground">
           <span className="dui-loading-spinner dui-loading" />
@@ -95,4 +75,57 @@ export default function AddServer({ setOpen }: { setOpen: (_: boolean) => void }
       }
     </div>
   </>;
+}
+
+async function httpLoad(url: string, serverFriendlyName: string, setOpen: (_: boolean) => void, setErr: (_?: string) => void, setWarn: (_?: string) => void, setState: (_: ServerLoginState) => void) {
+  try {
+    const server = new HTTPServer(url, "no-auth");
+
+    const flags = await server.getFlags();
+
+    if ((flags & StatusFlags.Unavailable) > 0) {
+      setErr("Server is unavailable!");
+      setState("Initial");
+      return;
+    }
+
+    if ((flags & StatusFlags.Unauthorized) > 0) {
+      setErr("Unauthorized to use the server!");
+      setState("Initial");
+      return;
+    }
+
+    if ((flags & StatusFlags.UnsupportedServerVersion) > 0) {
+      setErr("Server is on an unsupported version!");
+      setState("Initial");
+      return;
+    }
+
+    if ((flags & StatusFlags.ChallengeFailed) > 0) {
+      setErr();
+      setWarn("Integrity Challenge Failed!");
+    }
+
+    // We need no type of authentication
+    if (server.auth == AuthType.OpenToAll) {
+      ServersState.updateValueViaCallback((val) => {
+        val.push({
+          instance: server,
+          session: "no-auth",
+          name: serverFriendlyName,
+          url: url,
+          status: flags
+        });
+
+        return val;
+      });
+
+      setOpen(false);
+      return;
+    }
+  } catch (e) {
+    console.warn(e);
+    setErr("Something went wrong. Please check if everything is correct!");
+    setState("Initial");
+  }
 }

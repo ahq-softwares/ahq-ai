@@ -2,13 +2,15 @@ import { fetch } from "@tauri-apps/plugin-http";
 import { satisfies } from "semver"
 import { getKeys } from "./key";
 
+import { checkServerIntegrity } from "tauri-plugin-ahqai-api"
+
 export const supportedServerSemver = "0.x";
 
 export const StatusFlags = {
-  Ok: 1,
   Unavailable: 2,
   Unauthorized: 4,
-  UnsupportedServerVersion: 8
+  UnsupportedServerVersion: 8,
+  ChallengeFailed: 16
 }
 
 export enum AuthType {
@@ -29,7 +31,9 @@ export class HTTPServer {
   }
 
   async getFlags() {
-    await getKeys();
+    const keys = (await getKeys(true)).keys;
+
+    console.log(keys);
 
     let out = 0;
 
@@ -44,6 +48,38 @@ export class HTTPServer {
       out |= StatusFlags.Unavailable;
 
       return out;
+    }
+
+    const versionKey = `v${output.version}`;
+
+    if (!keys[versionKey]) out |= (StatusFlags.ChallengeFailed || StatusFlags.UnsupportedServerVersion);
+
+    if (keys[versionKey]) {
+      const pubkey = keys[versionKey].pubkey;
+
+      const data = new Uint8Array(256);
+
+      data.fill(0);
+
+      for (let i = 0; i < 256; i++) {
+        data[i] = Math.floor(Math.random() * 127);
+      }
+
+      console.log(`Using pubkey ${pubkey}`);
+
+      const binaryString = atob(pubkey);
+      const pkey = Uint8Array.from(binaryString, (char) => char.charCodeAt(0));
+
+      const signature = await fetch(`${this.url}/challenge`, {
+        method: "POST",
+        body: data.buffer
+      })
+        .then((d) => d.arrayBuffer())
+        .catch(() => new ArrayBuffer());
+
+      console.warn(data, signature, pkey);
+
+      if (!(await checkServerIntegrity(data.buffer, signature, pkey))) out |= StatusFlags.ChallengeFailed;
     }
 
     if (!satisfies(output.version, supportedServerSemver)) out |= StatusFlags.UnsupportedServerVersion;
@@ -72,6 +108,7 @@ export class HTTPServer {
     }
 
     // Auth Check
+    // TODO: Auth Ping
 
     return out;
   }

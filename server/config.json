@@ -22,6 +22,8 @@
     ]
   },
   "authentication": {
-    "kind": "OpenToAll"
+    "kind": "Account",
+    "registration_allowed": true,
+    "max_users": null
   }
 }
