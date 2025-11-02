@@ -223,11 +223,11 @@ sidebar: false
 
   const channelOpt = [
     { text: 'Stable', value: 'latest' },
-    { text: 'Latest', value: 'bleeding' },
+    { text: 'Pre-Stable', value: 'bleeding' },
   ]
 
   const appType = [
-    { text: 'Latest (Recommended)', value: 'release' },
+    { text: 'Release (Recommended)', value: 'release' },
     { text: 'Debug', value: 'debug' },
   ];
 
