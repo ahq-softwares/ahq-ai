@@ -49,14 +49,14 @@ Step 1: To run the configuration wizard run the following command:
 cargo run -- config
 ```
 You will get a output like the picture below, here you can update the configuration of the server.
-![Step 1](/docs/src/public/images/image1-1.png)
+![Step 1](/images/image1-1.png)
 
 Step 2: To configure ollama use your arrow keys to navigate to the ollama section.
-![Step 2.1](/docs/src/public/images/image1.png)
+![Step 2.1](/images/image1.png)
 
 Then, select the hostname and the ports of the ollama server. You can find these out by running 
 ```bash
 ollama serve
 ```
 and updating the port by clicking enter on your keyboard.
-![Step 2.1](/docs/src/public/images/image2.png)
+![Step 2.1](/images/image2.png)
