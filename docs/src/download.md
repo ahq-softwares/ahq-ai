@@ -227,8 +227,8 @@ sidebar: false
   ]
 
   const appType = [
-    { text: 'Normal release', value: 'release' },
-    { text: 'Debug release', value: 'debug' },
+    { text: 'Latest (Recommended)', value: 'release' },
+    { text: 'Debug', value: 'debug' },
   ];
 
   const winArchOptions = [
@@ -461,6 +461,8 @@ Please read the guide [here](/docs/iossetup)
 :::
 
 ## Server
+
+*The Server is for advanced users and requires a separate installation of Ollama, which must be configured before running the AHQ AI Server.*
 
 ### Prerequisites
 
