@@ -40,10 +40,6 @@ export default defineConfig({
 
     sidebar: [
       {
-        text: "Download",
-        link: "/download"
-      },
-      {
         text: 'Installation',
         collapsed: true,
         items: [
