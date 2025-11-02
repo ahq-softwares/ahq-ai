@@ -227,7 +227,7 @@ sidebar: false
   ]
 
   const appType = [
-    { text: 'Release (Recommended)', value: 'release' },
+    { text: 'Release', value: 'release' },
     { text: 'Debug', value: 'debug' },
   ];
 
