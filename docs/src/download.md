@@ -126,7 +126,7 @@ sidebar: false
   };
 
   (async() => {
-    const releaseData = await fetch("https://api.github.com/repos/ahq-softwares/ahq-ai/releases", {
+    const releaseData = await fetch("https://api.github.com/repos/ahq-softwares/ahq-ai/releases?per_page=100", {
       cache: "force-cache"
     })
       .then((d) => d.json());
