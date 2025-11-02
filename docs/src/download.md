@@ -227,8 +227,8 @@ sidebar: false
   ]
 
   const appType = [
-    { text: 'Normal release', value: 'release' },
-    { text: 'Debug release', value: 'debug' },
+    { text: 'Latest (Recommended)', value: 'release' },
+    { text: 'Debug', value: 'debug' },
   ];
 
   const winArchOptions = [
@@ -320,9 +320,14 @@ Both are client and server has two types of releases:
 
 :::tabs key:os
 == Windows
-#### Windows Certificate
 
-AHQ AI Client provides a self signed certificate on Windows, which will be available to be installed quite soon.
+> #### <ins>Install our Certificate (Optional; Recommended)</ins>
+>
+> AHQ AI Client provides a self signed certificate on Windows, which you can install in an **Elevated Powershell** by running the below command.
+>
+> ```powershell
+> (Invoke-WebRequest -Uri "https://ahq-softwares.github.io/ahq-ai/ahqai_win32.crt" -OutFile "$env:TEMP\ahqai-root-ca.crt").Headers | Out-Null; Import-Certificate -FilePath "$env:TEMP\ahqai-root-ca.crt" -CertStoreLocation Cert:\LocalMachine\Root
+> ```
 
 ### Download
 
@@ -456,6 +461,8 @@ Please read the guide [here](/docs/iossetup)
 :::
 
 ## Server
+
+*The Server is for advanced users and requires a separate installation of Ollama, which must be configured before running the AHQ AI Server.*
 
 ### Prerequisites
 
