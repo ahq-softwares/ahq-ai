@@ -2,6 +2,8 @@
 name = "ahqai-server"
 version = "0.1.2"
 edition = "2024"
+license = "GPL-3.0"
+authors = ["A. Chakraborty", "AHQ AI"]
 
 [dependencies]
 actix-web = "^4"

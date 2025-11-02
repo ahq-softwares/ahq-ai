@@ -2,7 +2,9 @@
 name = "ahqai"
 version = "0.1.0"
 description = "A Tauri App"
-authors = ["you"]
+authors = ["A. Chakraborty", "AHQ AI"]
+license = "GPL-3.0"
+license-file = "./GPL-3.0.md"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
