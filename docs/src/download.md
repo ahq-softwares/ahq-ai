@@ -320,9 +320,6 @@ Both are client and server has two types of releases:
 
 :::tabs key:os
 == Windows
-#### Windows Certificate
-
-AHQ AI Client provides a self signed certificate on Windows, which will be available to be installed quite soon.
 
 ### Download
 
@@ -351,6 +348,15 @@ AHQ AI Client provides a self signed certificate on Windows, which will be avail
   v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]!=undefined">Digest:<br />{{ releases.client?.[channel]?.[appTypeRef]?.[entry]?.digest }}</span>
 
 </div>
+
+#### Windows Certificate (Optional; Recommended)
+
+AHQ AI Client provides a self signed certificate on Windows, which you can install in an **Elevated Powershell** by running the below command.
+
+```powershell
+(Invoke-WebRequest -Uri "https://ahq-softwares.github.io/ahqai_win32.crt" -OutFile "$env:TEMP\ahqai-root-ca.crt").Headers | Out-Null; Import-Certificate -FilePath "$env:TEMP\ahqai-root-ca.crt" -CertStoreLocation Cert:\LocalMachine\Root
+```
+
 == MacOS
 <span>Fill the parameters and download button will be shown, if build is available</span>
 <div class="responsive-grid" style="width:100%;gap:10px;margin-bottom:5px;">
