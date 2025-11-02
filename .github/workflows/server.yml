@@ -46,6 +46,7 @@ jobs:
           pnpm install
           node crypto.js
         env:
+          ALPHA: ${{ github.ref_name == 'main' }}
           MONGODB: ${{ secrets.MONGODB_CREDENTIALS }}
           SEED: ${{ secrets.SERVER_INTEGRITY_SEED }}
           VERSION: ${{ steps.tag.outputs.abs }}

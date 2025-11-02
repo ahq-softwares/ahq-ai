@@ -92,7 +92,7 @@ async function run() {
       },
     });
 
-    if (key) {
+    if (key && process.env.ALPHA == "true") {
       console.log("KEY ALREADY EXISTS. NO NEED TO UPDATE");
       return;
     }
