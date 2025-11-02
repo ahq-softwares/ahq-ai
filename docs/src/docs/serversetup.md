@@ -59,4 +59,31 @@ Then, select the hostname and the ports of the ollama server. You can find these
 ollama serve
 ```
 and updating the port by clicking enter on your keyboard.
-![Step 2.1](/images/image2.png)
+![Step 2.2](/images/image2.png)
+
+Step 3: If you want to update the number of messages you can update it with this variable.
+![Step 3](/images/image3.png)
+
+Step 4: To interact with your AI using images you will need to setup this feature.
+![Step 4.1](/images/image4.png)
+
+When you enter it you will be prompted to add a image model like llava:7b.
+![Step 4.2](/images/image7.png)
+
+Once you add it you can exit it and click done.
+![Step 4.3](/images/image9.png)
+
+Step 5: To add a text model (required) to interact with the AI you will need to update this.
+![Step 5.1](/images/image11.png)
+
+When you enter it you will be prompted to add a text model like llama3:7b
+![Step 5.2](/images/image14.png)
+
+Once you add it you can exit it and click done.
+![Step 5.3](/images/image16.png)
+
+Step 6: You can setup the authentication to secure your AI server here.
+![Step 6](/images/image17.png)
+
+Step 7: Finally you can go to the save button and save your configuration.
+![Step 7](/images/image19.png)
