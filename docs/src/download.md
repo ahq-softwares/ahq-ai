@@ -321,7 +321,7 @@ Both are client and server has two types of releases:
 :::tabs key:os
 == Windows
 
-> #### Install our Certificate (Optional; Recommended)
+> #### <ins>Install our Certificate (Optional; Recommended)</ins>
 >
 > AHQ AI Client provides a self signed certificate on Windows, which you can install in an **Elevated Powershell** by running the below command.
 >
