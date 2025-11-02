@@ -59,6 +59,13 @@ export default defineConfig({
           { text: "Server Setup", link: "/docs/serversetup.md" },
           { text: "Client Setup", link: "/docs/clientsetup.md" },
         ]
+      },
+      {
+        text: 'Contributing',
+        collapsed: false,
+        items: [
+          { text: "Introduction", link: "/contributing/index.md" },
+        ]
       }
     ],
 
