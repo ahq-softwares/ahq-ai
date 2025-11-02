@@ -357,6 +357,12 @@ Both are client and server has two types of releases:
 
 </div>
 == MacOS
+
+#### ⚠️ Requires Additional
+Mac users need to follow a few additional steps. Refer to [AHQ AI Client for MacOS](/install/mac)
+
+#### Download
+
 <span>Fill the parameters and download button will be shown, if build is available</span>
 <div class="responsive-grid" style="width:100%;gap:10px;margin-bottom:5px;">
   <Select v-model="channel" :options="channelOpt" placeholder="Select Channel" />
@@ -434,7 +440,9 @@ Both are client and server has two types of releases:
   v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]!=undefined">Digest:<br />{{ releases.client?.[channel]?.[appTypeRef]?.[entry]?.digest }}</span>
 </div>
 == IOS
-Please read the guide [here](/docs/iossetup)
+
+Please read the guide [here](/install/ios)
+
 :::
 
 </div>

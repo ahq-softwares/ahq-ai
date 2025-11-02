@@ -1,5 +1,5 @@
 ---
-title: Building for IOS
+title: AHQ AI Client for MacOS
 editLink: true
 ---
 

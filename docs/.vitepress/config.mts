@@ -44,11 +44,18 @@ export default defineConfig({
         link: "/download"
       },
       {
+        text: 'Installation',
+        collapsed: true,
+        items: [
+          { text: 'AHQ AI Client for MacOS', link: '/install/mac' },
+          { text: 'AHQ AI Client for IOS', link: '/install/ios' }
+        ]
+      },
+      {
         text: 'Docs',
         collapsed: false,
         items: [
           { text: "Introduction", link: "/docs/index.md" },
-          { text: "Building for IOS", link: "/docs/iossetup.md" },
           { text: "Server Setup", link: "/docs/serversetup.md" },
           { text: "Client Setup", link: "/docs/clientsetup.md" },
         ]
