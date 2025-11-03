@@ -43,7 +43,7 @@ function generateDeterministicKeyPair() {
       seed: seedBuffer,
 
       publicKeyEncoding: {
-        type: "pkcs8",
+        type: "raw",
         format: "der",
       },
       // privateKeyEncoding: {
