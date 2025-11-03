@@ -43,7 +43,7 @@ function generateDeterministicKeyPair() {
       seed: seedBuffer,
 
       publicKeyEncoding: {
-        type: "raw",
+        type: "spki",
         format: "der",
       },
       // privateKeyEncoding: {
@@ -67,7 +67,8 @@ fs.writeFileSync(
   keys.privateKey
 );
 
-const base64Key = Buffer.from(keys.publicKey).toString("base64");
+const buf = Buffer.from(keys.publicKey);
+const base64Key = buf.subarray(buf.length - 32).toString("base64");
 
 async function run() {
   const client = new MongoClient(process.env.MONGODB, {
@@ -95,18 +96,20 @@ async function run() {
       return;
     }
 
-    await keys.updateMany(
-      {
-        expiryDate: {
-          $exists: false,
+    if (process.env.ALPHA != "true") {
+      await keys.updateMany(
+        {
+          expiryDate: {
+            $exists: false,
+          },
         },
-      },
-      {
-        $set: {
-          expiryDate: futureDate,
-        },
-      }
-    );
+        {
+          $set: {
+            expiryDate: futureDate,
+          },
+        }
+      );
+    }
 
     await keys.insertOne({
       _id: APP_VERSION,
