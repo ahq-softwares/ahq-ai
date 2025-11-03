@@ -33,8 +33,6 @@ export class HTTPServer {
   async getFlags() {
     const keys = (await getKeys(true)).keys;
 
-    console.log(keys);
-
     let out = 0;
 
     let output;
@@ -65,8 +63,6 @@ export class HTTPServer {
         data[i] = Math.floor(Math.random() * 127);
       }
 
-      console.log(`Using pubkey ${pubkey}`);
-
       const binaryString = atob(pubkey);
       const pkey = Uint8Array.from(binaryString, (char) => char.charCodeAt(0));
 
@@ -76,8 +72,6 @@ export class HTTPServer {
       })
         .then((d) => d.arrayBuffer())
         .catch(() => new ArrayBuffer());
-
-      console.warn(data, signature, pkey);
 
       if (!(await checkServerIntegrity(data.buffer, signature, pkey))) out |= StatusFlags.ChallengeFailed;
     }

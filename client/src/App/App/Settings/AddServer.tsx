@@ -34,12 +34,12 @@ export default function AddServer({ setOpen }: { setOpen: (_: boolean) => void }
         <div className="w-full flex gap-5">
           <div className="w-full grid gap-3">
             <Label htmlFor="name-1">Server Name</Label>
-            <Input id="name-1" ref={serverNameRef} name="name" required minLength={2} autoComplete="off" disabled={state != "Initial"} placeholder="eg. Jail's Hub" />
+            <Input id="name-1" ref={serverNameRef} name="name" required minLength={2} autoComplete="off" disabled={state != "Initial"} defaultValue="Jail's Hub" />
           </div>
 
           <div className="w-full grid gap-3">
             <Label htmlFor="username-1">Server Url</Label>
-            <Input id="username-1" ref={serverUrlRef} name="username" required minLength={5} autoComplete="off" disabled={state != "Initial"} placeholder="http://localhost:3124" />
+            <Input id="username-1" ref={serverUrlRef} name="username" required minLength={5} autoComplete="off" disabled={state != "Initial"} defaultValue="http://localhost:3124" />
           </div>
         </div>
 

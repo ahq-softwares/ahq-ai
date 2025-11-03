@@ -37,7 +37,7 @@ pub async fn check_file_integrity(file: Vec<u8>, sig: Vec<u8>) -> Result<bool> {
 pub async fn check_resp_integrity(resp: Vec<u8>, sig: Vec<u8>, pubkey: Vec<u8>) -> Result<bool> {
   let verifier = VerifyingKey::from_bytes((&pubkey as &[u8]).try_into()?)?;
   let sig = Signature::from_bytes((&sig as &[u8]).try_into()?);
-  
+
   let out = spawn_blocking(move || {
     verifier.verify_strict(&resp, &sig).is_ok()
   }).await?;

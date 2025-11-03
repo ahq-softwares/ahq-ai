@@ -17,7 +17,7 @@ use tokio::{fs::File, task::spawn_blocking};
 
 pub mod hash;
 
-pub static INTEGRITY_KEY: &'static [u8; 32] = include_bytes!("./key.bin");
+pub static INTEGRITY_KEY: &'static [u8; 64] = include_bytes!("./key.bin");
 
 pub static AGENT: LazyLock<HashingAgent> = LazyLock::new(|| {
   HashingAgent::new()

@@ -36,7 +36,7 @@ impl HashingAgent {
     for _ in 0..threads {
       let rxc = rx.clone();
       thread::spawn(move || {
-        let mut signer = SigningKey::from_bytes(INTEGRITY_KEY);
+        let mut signer = SigningKey::from_keypair_bytes(INTEGRITY_KEY).unwrap();
         
         while let Ok(x) = rxc.recv() {
           match x {
@@ -47,7 +47,9 @@ impl HashingAgent {
               _ = tx.send(verify(&pass, &hash).ok());
             }
             HashResp::Challenge { bytes, tx } => {
-              _ = tx.send(signer.try_sign(&bytes).ok())
+              let sign = signer.try_sign(&bytes).ok();
+
+              _ = tx.send(sign)
             }
           }
         }

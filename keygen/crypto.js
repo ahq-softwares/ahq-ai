@@ -2,6 +2,8 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
+const nacl = require("tweetnacl");
+
 const { MongoClient, ServerApiVersion } = require("mongodb");
 
 const FALLBACK = "AHQSoftwaresTestingSignatureKeyUsedDuringFallback123";
@@ -31,28 +33,10 @@ function deriveDeterministicSeed(masterSeed, appVersion) {
 function generateDeterministicKeyPair() {
   const seedBuffer = deriveDeterministicSeed(MASTER_SECRET_SEED, APP_VERSION);
 
-  // IMPORTANT NOTE:
-  // The built-in Node.js crypto API does NOT support deterministic RSA generation via a seed.
-  // It is typically used for generating modern keys like Ed25519 (an ECC algorithm) which
-  // is a common and secure replacement for RSA in many signing contexts and is fully deterministic.
-  // By using the 'seed' option below, the generated key pair will be IDENTICAL every time
-  // this function is run with the same MASTER_SECRET_SEED and APP_VERSION.
-
   try {
-    const { publicKey } = crypto.generateKeyPairSync("ed25519", {
-      seed: seedBuffer,
+    const { publicKey, secretKey } = nacl.sign.keyPair.fromSeed(seedBuffer);
 
-      publicKeyEncoding: {
-        type: "spki",
-        format: "der",
-      },
-      // privateKeyEncoding: {
-      //   type: "pkcs8",
-      //   format: "der",
-      // },
-    });
-
-    return { publicKey, privateKey: seedBuffer };
+    return { publicKey, privateKey: secretKey };
   } catch (error) {
     console.error("Error generating key pair:", error.message);
     process.exit(1);
@@ -67,8 +51,18 @@ fs.writeFileSync(
   keys.privateKey
 );
 
-const buf = Buffer.from(keys.publicKey);
-const base64Key = buf.subarray(buf.length - 32).toString("base64");
+const base64KeyBuf = keys.publicKey;
+
+const base64Key = Buffer.from(base64KeyBuf).toString("base64");
+
+console.log(`PUBLIC KEY BUFFER (BASE64)
+
+Orig Length: ${base64KeyBuf.byteLength}
+
+${"-".repeat(44)}
+${base64Key}
+${"-".repeat(44)}
+`);
 
 async function run() {
   const client = new MongoClient(process.env.MONGODB, {
@@ -102,6 +96,9 @@ async function run() {
           expiryDate: {
             $exists: false,
           },
+          _id: {
+            $ne: APP_VERSION,
+          },
         },
         {
           $set: {
@@ -111,10 +108,12 @@ async function run() {
       );
     }
 
-    await keys.insertOne({
-      _id: APP_VERSION,
-      key: base64Key,
-    });
+    if (!key) {
+      await keys.insertOne({
+        _id: APP_VERSION,
+        key: base64Key,
+      });
+    }
   } catch (e) {
     console.error(e);
   } finally {
