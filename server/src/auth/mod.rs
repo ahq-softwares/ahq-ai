@@ -115,10 +115,7 @@ impl AuthSessionManager {
   pub async fn add_token(&self) -> Returns<AccountCreateOutcome> {
     let (key, (user, hash)) = gen_auth_token()?;
 
-    self
-      .accounts
-      .update(user.into_string(), hash.into_string())
-      .await?;
+    self.accounts.update(user, hash).await?;
 
     Ok(AccountCreateOutcome::SuccessfulOut(key))
   }
@@ -219,18 +216,18 @@ pub const VALUES: [char; 64] = [
   '5', '6', '7', '8', '9', '+', '/',
 ];
 
-pub type Hashed = Box<str>;
+pub type Hashed = String;
 
-pub fn gen_auth_token() -> Returns<(String, (Box<str>, Hashed))> {
+pub fn gen_auth_token() -> Returns<(String, (String, Hashed))> {
   let mut rng = rand::rng();
 
   let token = VALUES.choose_multiple(&mut rng, 128).collect::<String>();
 
-  let token_key = VALUES
-    .choose_multiple(&mut rng, TOKEN_ID_LENGTH)
-    .collect::<Box<str>>();
+  let mut token_key = String::from("tok:");
 
-  let hashed = hash(&token, BCRYPT_COST)?.into_boxed_str();
+  token_key.extend(VALUES.choose_multiple(&mut rng, TOKEN_ID_LENGTH));
+
+  let hashed = hash(&token, BCRYPT_COST)?;
 
   let token_to_output = format!("{token_key}.{token}");
 
