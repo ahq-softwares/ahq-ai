@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use mongodb::{Client, Collection, bson::doc};
 use serde::{Deserialize, Serialize};
+use tokio::spawn;
 
 use crate::{
   auth::authserver::AuthServer,
@@ -46,13 +47,12 @@ impl MongodbClient {
 impl AuthServer for MongodbClient {
   async fn get<'a>(&'a self, uid: &'a str) -> Returns<Option<String>> {
     let auth_hash = self.auth_hash.clone();
+    let doc = doc! {
+      "_id": uid
+    };
 
     tokio::spawn(async move {
-      let out = auth_hash
-        .find_one(doc! {
-          "_id": uid
-        })
-        .await?;
+      let out = auth_hash.find_one(doc).await?;
 
       Ok(out.map(|u| u.hash))
     })
@@ -121,8 +121,7 @@ impl AuthServer for MongodbClient {
     let auth_hash = self.auth_hash.clone();
 
     spawn(async move {
-      self
-        .auth_hash
+      auth_hash
         .delete_one(doc! {
           "_id": uid
         })

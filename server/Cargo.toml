@@ -20,7 +20,7 @@ secrecy = "^0.10"
 cursive = "^0.21"
 cursive-tabs = "^0.8"
 
-redis = { version = "^0.32", features = ["aio"] }
+redis = { version = "^0.32", features = ["aio", "tokio-comp"] }
 tikv-client = "^0.3"
 mongodb = "^3"
 moka = { version = "^0.12", features = ["future"] }
