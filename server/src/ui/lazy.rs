@@ -22,9 +22,10 @@ impl<V: View, F: Fn(&mut Cursive) + 'static> OnAuthStateUpdate<V, F> {
         let data: &mut Ptr<Config> = siv.user_data().unwrap();
 
         match data.authentication {
-          Authentication::Account { .. } => Authentication::TokenBased,
-          Authentication::OpenToAll => Authentication::TokenBased,
-          Authentication::TokenBased => Authentication::OpenToAll,
+          Authentication::Account { .. } => Authentication::OpenToAll,
+          Authentication::OpenToAll => Authentication::Account {
+            registration_allowed: false,
+          },
         }
       })),
       callback,

@@ -1,0 +1,8 @@
+{
+  "tikv": {
+    "endpoints": ["http://127.0.0.1:2379"],
+    "tls_config": null,
+    "timeout_secs": 5
+  },
+  "redis": {}
+}

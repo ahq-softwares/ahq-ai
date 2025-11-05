@@ -10,7 +10,6 @@ use crate::{
 };
 
 mod open;
-mod token;
 mod user;
 
 #[allow(clippy::type_complexity)]
@@ -39,11 +38,9 @@ pub fn auth_page(
 
         match auth {
           Authentication::OpenToAll => open::render(layout),
-          Authentication::TokenBased => token::render(layout),
           Authentication::Account {
             registration_allowed,
-            max_users,
-          } => user::render(layout, registration_allowed, max_users),
+          } => user::render(layout, registration_allowed),
         }
       });
     },

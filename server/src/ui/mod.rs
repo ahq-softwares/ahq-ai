@@ -115,7 +115,6 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
             "{} ↗",
             match c_.authentication {
               Authentication::OpenToAll => "No Auth",
-              Authentication::TokenBased => "Token",
               Authentication::Account { .. } => "Account",
             }
           ),
@@ -124,17 +123,14 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
               Dialog::around(
                 SelectView::new()
                   .item("No Auth (OpenToAll)", 0u8)
-                  .item("Token (TokenBased)", 1u8)
                   .item("Account (Account)", 2u8)
                   .on_submit(|x, bit| {
                     let c_: &mut Ptr<Config> = x.user_data().unwrap();
 
                     c_.authentication = match bit {
                       0 => Authentication::OpenToAll,
-                      1 => Authentication::TokenBased,
                       2 => Authentication::Account {
                         registration_allowed: true,
-                        max_users: None,
                       },
                       _ => unreachable!(),
                     };
@@ -143,7 +139,6 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
                       "{} ↗",
                       match c_.authentication {
                         Authentication::OpenToAll => "No Auth",
-                        Authentication::TokenBased => "Token",
                         Authentication::Account { .. } => "Account",
                       }
                     );

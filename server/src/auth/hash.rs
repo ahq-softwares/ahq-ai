@@ -22,7 +22,7 @@ pub enum HashResp {
   Challenge {
     bytes: Vec<u8>,
     tx: OneshotSender<Option<Signature>>,
-  }
+  },
 }
 
 impl HashingAgent {
@@ -37,7 +37,7 @@ impl HashingAgent {
       let rxc = rx.clone();
       thread::spawn(move || {
         let mut signer = SigningKey::from_keypair_bytes(INTEGRITY_KEY).unwrap();
-        
+
         while let Ok(x) = rxc.recv() {
           match x {
             HashResp::GenHash { pass, tx } => {
@@ -98,7 +98,7 @@ impl HashingAgent {
     rx.await.ok()?
   }
 
-    /// # Returns
+  /// # Returns
   /// This function returns None in case of the server's queue being maxed out
   pub async fn gen_signature(&self, data: &[u8]) -> Option<Signature> {
     if self.0.is_full() {

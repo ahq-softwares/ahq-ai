@@ -1,35 +1,41 @@
 use crate::{
-  auth::hash::HashingAgent,
-  server::MAX_ACCOUNTS,
-  structs::{BCRYPT_COST, error::Returns},
+  auth::{
+    authserver::{AuthServer, mongodb::MongodbClient, tikv::TikvClient},
+    cache::{AsyncCaching, moka::MokaSessions},
+    hash::HashingAgent,
+  },
+  server::{CONFIG, DBCONF},
+  structs::{
+    Authentication, BCRYPT_COST,
+    db::{AuthDbConfig, CacheConfig},
+    error::Returns,
+  },
 };
 use base64::{Engine as _, engine::general_purpose};
 use bcrypt::hash;
-use moka::future::Cache;
 use rand::{Rng, seq::IndexedRandom};
-use serde_json::Deserializer;
 use std::{
-  io::{BufReader, Write},
-  sync::{Arc, LazyLock},
-  time::{Duration, SystemTime, UNIX_EPOCH},
+  sync::LazyLock,
+  time::{SystemTime, UNIX_EPOCH},
 };
-use tokio::{fs::File, task::spawn_blocking};
+use tokio::task::spawn_blocking;
 
 pub mod hash;
 
+pub mod authserver;
+pub mod cache;
+
 pub static INTEGRITY_KEY: &'static [u8; 64] = include_bytes!("./key.bin");
 
-pub static AGENT: LazyLock<HashingAgent> = LazyLock::new(|| {
-  HashingAgent::new()
-});
+pub static AGENT: LazyLock<HashingAgent> = LazyLock::new(|| HashingAgent::new());
 
 const TOKEN_ID_LENGTH: usize = 12;
 
 #[allow(dead_code)]
-pub struct AuthSessionManager {
+pub(crate) struct AuthSessionManager {
   // UserID -> session token
-  sessions: Cache<Box<str>, Arc<Box<str>>>,
-  accounts: Cache<Box<str>, Arc<Box<str>>>,
+  sessions: Box<dyn AsyncCaching + Send + Sync>,
+  pub accounts: Box<dyn AuthServer + Send + Sync>,
   agent: &'static HashingAgent,
 }
 
@@ -38,6 +44,7 @@ pub enum AccountCreateOutcome {
   WeakPassword,
   InternalServerError,
   Successful,
+  SuccessfulOut(String),
 }
 
 pub enum AccountCheckOutcome {
@@ -51,25 +58,22 @@ pub type AccountOrToken = (Box<str>, Box<str>);
 
 impl AuthSessionManager {
   pub async fn create() -> Self {
-    let sessions = Cache::builder()
-      .time_to_live(Duration::from_days(30))
-      .build();
+    let accounts: Box<dyn AuthServer + Send + Sync>;
+    let sessions: Box<dyn AsyncCaching + Send + Sync>;
 
-    let accounts = Cache::builder().build();
-
-    if let Ok(x) = File::open("./authdata.jsonl").await {
-      let x = x.into_std().await;
-
-      let x = BufReader::new(x);
-
-      let list = Deserializer::from_reader(x)
-        .into_iter::<AccountOrToken>()
-        .map(|x| x.unwrap());
-
-      for (id, pwd_hash) in list {
-        accounts.insert(id, Arc::new(pwd_hash)).await;
+    match &DBCONF.authdb {
+      AuthDbConfig::Mongodb { .. } => {
+        accounts = Box::new(MongodbClient::new().await);
       }
-    }
+      AuthDbConfig::Tikv { .. } => {
+        accounts = Box::new(TikvClient::new().await);
+      }
+    };
+
+    match &DBCONF.cache {
+      CacheConfig::Moka => sessions = Box::new(MokaSessions::new()),
+      _ => unreachable!(),
+    };
 
     Self {
       sessions,
@@ -77,14 +81,25 @@ impl AuthSessionManager {
       agent: &*AGENT,
     }
   }
+}
 
+impl AuthSessionManager {
   pub async fn can_register(&self) -> bool {
-    self.accounts.entry_count() < *MAX_ACCOUNTS
+    let Authentication::Account {
+      registration_allowed,
+      ..
+    } = CONFIG.authentication
+    else {
+      return false;
+    };
+
+    registration_allowed
   }
 
+  /// THIS ENDPOINT HAS ABSOLUTELY NO PROTECTION
+  /// DEVS SHOULD USE `AuthSessionManager::can_register` first
   pub async fn register(&self, user: &str, pass: &str) -> Returns<AccountCreateOutcome> {
-    self.accounts.run_pending_tasks().await;
-    if self.accounts.contains_key(user) {
+    if self.accounts.exists(user).await? {
       return Ok(AccountCreateOutcome::UsernameExists);
     }
 
@@ -96,15 +111,20 @@ impl AuthSessionManager {
       return Ok(AccountCreateOutcome::InternalServerError);
     };
 
-    self
-      .accounts
-      .insert(
-        user.to_owned().into_boxed_str(),
-        Arc::new(pwd_hash.into_boxed_str()),
-      )
-      .await;
+    self.accounts.update(user.to_owned(), pwd_hash).await?;
 
     Ok(AccountCreateOutcome::Successful)
+  }
+
+  pub async fn add_token(&self) -> Returns<AccountCreateOutcome> {
+    let (key, (user, hash)) = gen_auth_token()?;
+
+    self
+      .accounts
+      .update(user.into_string(), hash.into_string())
+      .await?;
+
+    Ok(AccountCreateOutcome::SuccessfulOut(key))
   }
 
   pub async fn is_valid_token(&self, token: &str) -> Returns<AccountCheckOutcome> {
@@ -116,7 +136,7 @@ impl AuthSessionManager {
   }
 
   pub async fn is_valid_account(&self, userid: &str, pass: &str) -> Returns<AccountCheckOutcome> {
-    let Some(hash) = self.accounts.get(userid).await else {
+    let Some(hash) = self.accounts.get(userid).await? else {
       return Ok(AccountCheckOutcome::NotFound);
     };
 
@@ -128,7 +148,7 @@ impl AuthSessionManager {
       return Ok(AccountCheckOutcome::InvalidPassword);
     }
 
-    if let Some(session) = self.sessions.get(userid).await {
+    if let Some(session) = self.sessions.get(userid).await? {
       let sess_cloned = format!("{userid}.{session}");
 
       return Ok(AccountCheckOutcome::Some(sess_cloned));
@@ -137,13 +157,7 @@ impl AuthSessionManager {
     let sess = gen_session_token()?;
     let sess_cloned = format!("{userid}.{sess}");
 
-    self
-      .sessions
-      .insert(
-        userid.to_owned().into_boxed_str(),
-        Arc::new(sess.into_boxed_str()),
-      )
-      .await;
+    self.sessions.insert(userid, sess).await?;
 
     Ok(AccountCheckOutcome::Some(sess_cloned))
   }
@@ -157,34 +171,10 @@ impl AuthSessionManager {
       .sessions
       .get(userid)
       .await
+      .ok()
+      .flatten()
       .map(|x| session == (&x as &str))
       .is_some_and(|x| x)
-  }
-
-  pub async fn before_exit(&self) -> Returns<()> {
-    let file = File::create("authdata.jsonl").await?;
-    let mut file = file.into_std().await;
-
-    let data = self.accounts.iter().map(|(k, pass)| {
-      let uid = &*k;
-      let uid = uid.clone();
-
-      let pass = &*pass;
-      let pass = pass.clone();
-
-      (uid, pass)
-    });
-
-    for data in data {
-      serde_json::to_writer(&mut file, &data)?;
-
-      file.write_all(b"\n")?;
-      file.flush()?;
-    }
-
-    file.flush()?;
-
-    Ok(())
   }
 }
 

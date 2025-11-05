@@ -1,22 +1,26 @@
 use std::{
-  fs as stdfs,
+  env, fs as stdfs,
   sync::{LazyLock, OnceLock},
   thread::available_parallelism,
 };
 
-use actix_web::{App, HttpServer, web};
-use chalk_rs::Chalk;
-use ollama_rs::Ollama;
-use serde_json::from_str;
-
 use crate::{
   auth::AuthSessionManager,
-  structs::{Authentication, Config},
+  structs::{Authentication, Config, db::DatabaseConfig},
 };
+use actix_web::{App, HttpServer, web};
+use bcrypt::verify;
+use chalk_rs::Chalk;
+use ollama_rs::Ollama;
+use secrecy::SecretString;
+use serde_json::from_str;
 
+pub mod admin;
 pub mod auth;
 pub mod chat;
 pub mod http;
+
+pub mod ffi;
 
 pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
   let data = stdfs::read_to_string("config.json").expect("Unable to load config");
@@ -24,20 +28,13 @@ pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
   from_str(&data).expect("Invalid configuration file, unable to parse")
 });
 
+pub static DBCONF: LazyLock<DatabaseConfig> = LazyLock::new(|| DatabaseConfig::get());
+
 pub static HISTORY_LENGTH: LazyLock<usize> = LazyLock::new(|| CONFIG.ollama.msgs.saturating_mul(2));
 
-pub static MAX_ACCOUNTS: LazyLock<u64> = LazyLock::new(|| {
-  let Authentication::Account { max_users, .. } = &CONFIG.authentication else {
-    return u64::MAX;
-  };
-
-  max_users.as_ref().map(|x| *x).unwrap_or(u64::MAX)
-});
-
-pub static TOKEN: LazyLock<bool> =
-  LazyLock::new(|| matches!(CONFIG.authentication, Authentication::TokenBased));
-
 pub static AUTH: OnceLock<AuthSessionManager> = OnceLock::new();
+
+pub static REAL_ADMIN_PASSWORD: OnceLock<SecretString> = OnceLock::new();
 
 pub static OLLAMA: LazyLock<Ollama> =
   LazyLock::new(|| Ollama::new(CONFIG.ollama.host.as_ref(), CONFIG.ollama.port));
@@ -82,6 +79,8 @@ pub async fn main() -> std::io::Result<()> {
     println!("----------------");
   }
 
+  let admin_api = request_admin_passwd();
+
   let mut server = HttpServer::new(move || {
     let mut app = App::new()
       .service(http::index)
@@ -93,6 +92,15 @@ pub async fn main() -> std::io::Result<()> {
 
     if auth {
       app = app.service(auth::auth);
+    }
+
+    if admin_api {
+      app = app
+        .service(admin::verify)
+        .service(admin::list)
+        .service(admin::create)
+        .service(admin::create_token)
+        .service(admin::delete);
     }
 
     if registration_api {
@@ -110,7 +118,7 @@ pub async fn main() -> std::io::Result<()> {
   }
 
   println!("----------------");
-  chalk.blue().println(&"Server is ready!");
+  chalk.blue().println(&"Server is starting!");
   println!("----------------");
   println!();
 
@@ -134,18 +142,52 @@ pub async fn main() -> std::io::Result<()> {
     .bold()
     .println(&"Please DO NOT use Ctrl+C to terminate. It will lead to data corruption!");
 
-  if auth {
-    AUTH
-      .get()
-      .expect("Impossible error")
-      .before_exit()
-      .await
-      .unwrap();
-  }
-
   chalk.reset_style().blue().bold().println(
     &"Server state has been successfully set! Closing server. Session tokens will be discarded.",
   );
 
   out
+}
+
+// Rquests admin password if needed and outputs if
+// you can enable admin urls
+fn request_admin_passwd() -> bool {
+  if let Some(x) = &CONFIG.admin_pass_hash {
+    let hash = x as &str;
+
+    let passwd;
+
+    if let Ok(x) = env::var("AHQAI_ADMIN_PASSWORD") {
+      passwd = x;
+    } else {
+      println!("----------------");
+      println!("THE GIVEN SERVER IS PROTECTED BY SERVER ADMIN PASSWORD");
+      println!("BUT THE `AHQAI_ADMIN_PASSWORD` VARIABLE WAS NOT FOUND");
+      println!("IN THE CURRENT SERVER ENVIRONMENT. REQUESTING MANUAL ENTRY");
+      println!("----------------");
+      println!();
+
+      passwd = rpassword::prompt_password("Enter your administrator password : ")
+        .expect("Unable to read your password");
+    }
+
+    if !verify(&passwd, hash).unwrap_or(false) {
+      panic!("Invalid Password was provided")
+    }
+
+    println!();
+    println!("----------------");
+    println!("SERVER ADMIN PASSWORD AUTH SUCCESSFUL");
+    println!("SERVER WILL START UP NOW");
+    println!("----------------");
+    println!();
+
+    REAL_ADMIN_PASSWORD
+      .set(SecretString::from(passwd))
+      .expect("Impossible Error");
+
+    return true;
+  }
+
+  false
 }

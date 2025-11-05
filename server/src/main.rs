@@ -7,11 +7,36 @@ mod ui;
 pub mod auth;
 pub(crate) mod structs;
 
+use chalk_rs::Chalk;
+
 fn main() {
   panic::set_hook(Box::new(|x| {
+    let mut chalk = Chalk::new();
+
     if let Some(x) = x.payload_as_str() {
-      println!("ERR: An Error Occured");
-      println!("ERR: {x}");
+      println!();
+
+      chalk.red().println(&"----------------");
+      chalk
+        .red()
+        .underline()
+        .println(&"An Critical Error has occured");
+      chalk.reset_style();
+      chalk
+        .yellow()
+        .println(&"The server was unable to achnowledge");
+      chalk
+        .yellow()
+        .println(&"and handle the error promptly without");
+      chalk.yellow().println(&"resorting to server shutdown");
+
+      println!();
+
+      println!("{x}");
+
+      println!();
+
+      chalk.red().println(&"----------------");
     } else {
       println!("ERR: Unknown");
     }

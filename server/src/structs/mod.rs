@@ -6,6 +6,7 @@ use tokio::fs;
 
 use crate::structs::error::Returns;
 
+pub mod db;
 pub mod error;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,11 +40,7 @@ pub struct OllamaConfiguration {
 #[serde(tag = "kind")]
 pub enum Authentication {
   OpenToAll,
-  TokenBased,
-  Account {
-    registration_allowed: bool,
-    max_users: Option<u64>,
-  },
+  Account { registration_allowed: bool },
 }
 
 impl Config {

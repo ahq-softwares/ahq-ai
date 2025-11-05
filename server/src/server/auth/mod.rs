@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 use crate::{
   auth::{AccountCheckOutcome, AccountCreateOutcome},
-  server::{AUTH, TOKEN},
+  server::AUTH,
 };
 
 #[derive(Deserialize)]
@@ -33,15 +33,10 @@ pub async fn auth(payload: Bytes) -> Result<impl Responder> {
   let auth_ref = AUTH
     .get()
     .expect("Auth must be defined or else this function cant be registered");
-  // If invalid close all
-  // This is a cancel thread
-  let resp = match *TOKEN {
-    true => auth_ref.is_valid_token(auth.pass).await?,
-    false => {
-      auth_ref
-        .is_valid_account(auth.username.unwrap_or_default(), auth.pass)
-        .await?
-    }
+
+  let resp = match auth.username {
+    None => auth_ref.is_valid_token(auth.pass).await?,
+    Some(username) => auth_ref.is_valid_account(username, auth.pass).await?,
   };
 
   match resp {
@@ -83,5 +78,6 @@ pub async fn register(payload: Bytes) -> Result<impl Responder> {
     AccountCreateOutcome::WeakPassword => {
       Ok(HttpResponse::BadRequest().body(r#"{ "msg": "Insecure Password" }"#))
     }
+    _ => Ok(HttpResponse::UnprocessableEntity().body(r#"{ "msg": "Unreachable Output" }"#)),
   }
 }

@@ -7,7 +7,6 @@ use crate::{server::CONFIG, structs::Authentication};
 #[derive(Serialize)]
 pub enum ShowedAuth {
   OpenToAll,
-  TokenBased,
   Account,
 }
 
@@ -46,9 +45,6 @@ impl RootResponse {
       }
       Authentication::OpenToAll => {
         out.auth = ShowedAuth::OpenToAll;
-      }
-      Authentication::TokenBased => {
-        out.auth = ShowedAuth::TokenBased;
       }
     }
 
