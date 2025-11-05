@@ -1,7 +1,7 @@
 use crate::{
   auth::{
     authserver::{AuthServer, mongodb::MongodbClient, tikv::TikvClient},
-    cache::{AsyncCaching, moka::MokaSessions},
+    cache::{AsyncCaching, moka::MokaSessions, redis::RedisSessions},
     hash::HashingAgent,
   },
   server::{CONFIG, DBCONF},
@@ -62,17 +62,13 @@ impl AuthSessionManager {
     let sessions: Box<dyn AsyncCaching + Send + Sync>;
 
     match &DBCONF.authdb {
-      AuthDbConfig::Mongodb { .. } => {
-        accounts = Box::new(MongodbClient::new().await);
-      }
-      AuthDbConfig::Tikv { .. } => {
-        accounts = Box::new(TikvClient::new().await);
-      }
+      AuthDbConfig::Mongodb { .. } => accounts = Box::new(MongodbClient::new().await),
+      AuthDbConfig::Tikv { .. } => accounts = Box::new(TikvClient::new().await),
     };
 
     match &DBCONF.cache {
       CacheConfig::Moka => sessions = Box::new(MokaSessions::new()),
-      _ => unreachable!(),
+      CacheConfig::Redis { .. } => sessions = Box::new(RedisSessions::new().await),
     };
 
     Self {

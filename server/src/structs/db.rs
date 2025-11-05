@@ -37,7 +37,7 @@ pub enum CacheConfig {
   #[serde(rename = "moka")]
   Moka,
   #[serde(rename = "redis")]
-  Redis {},
+  Redis { url: Box<str> },
 }
 
 impl Default for AuthDbConfig {

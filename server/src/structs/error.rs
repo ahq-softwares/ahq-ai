@@ -1,6 +1,7 @@
 use actix_web::http::StatusCode;
 use base64::DecodeError;
 use mongodb::error::Error as MongoDBError;
+use redis::RedisError;
 use thiserror::Error;
 
 use bcrypt::BcryptError;
@@ -23,6 +24,8 @@ pub enum ServerError {
   Tikv(#[from] TikvError),
   #[error(transparent)]
   MongoDB(#[from] MongoDBError),
+  #[error(transparent)]
+  RedisDBError(#[from] RedisError),
   #[error("Failed to convert OS String to String")]
   StringConvertErr,
   #[error("Tried to retry many times but failed")]

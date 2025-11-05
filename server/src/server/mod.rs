@@ -105,7 +105,6 @@ pub async fn main() -> std::io::Result<()> {
 
     if registration_api {
       app = app.service(auth::register);
-      // TODO: Registration stuff
     }
 
     app
