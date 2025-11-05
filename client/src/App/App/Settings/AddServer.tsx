@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { XCircle, AlertCircle } from "lucide-react";
 import { useRef, useState } from "react";
 
-type ServerLoginState = "Initial" | "Connecting";
+type ServerLoginState = "Initial" | "AuthToken" | "AuthAccount" | "Connecting";
 
 export default function AddServer({ setOpen }: { setOpen: (_: boolean) => void }) {
   const [state, setState] = useState<ServerLoginState>("Initial");
@@ -121,6 +121,16 @@ async function httpLoad(url: string, serverFriendlyName: string, setOpen: (_: bo
       });
 
       setOpen(false);
+      return;
+    }
+
+    if (server.auth == AuthType.TokenBased) {
+      setState("AuthToken");
+      return;
+    }
+
+    if (server.auth == AuthType.Account) {
+      setState("AuthAccount");
       return;
     }
   } catch (e) {
