@@ -78,7 +78,7 @@ export default function Application() {
       </div>
     </div>
 
-    <div className="w-full h-full flex flex-col px-4">
+    <div className="w-full h-full flex flex-col px-4 overflow-y-scroll">
       {content}
     </div>
   </div>;
@@ -131,7 +131,9 @@ export function ApplicationDesktop({ pageSet, page, content }: Props) {
     <ResizableHandle className="bg-none!" withHandle />
 
     <ResizablePanel className="bg-neutral/30 rounded-tl-2xl w-full h-full p-3 flex flex-col">
-      {content}
+      <div className="w-full h-full flex flex-col overflow-x-hidden overflow-y-scroll">
+        {content}
+      </div>
     </ResizablePanel>
   </ResizablePanelGroup>
 }

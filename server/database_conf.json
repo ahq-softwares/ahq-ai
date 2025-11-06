@@ -1,8 +1,10 @@
 {
-  "tikv": {
-    "endpoints": ["http://127.0.0.1:2379"],
-    "tls_config": null,
-    "timeout_secs": 5
+  "version": 1,
+  "authdb": {
+    "db": "mongodb",
+    "url": "mongodb+srv://admin:QO0MH3ZfIxdcvSiv@cluster0.0nvfpdd.mongodb.net/?appName=Cluster0"
   },
-  "redis": {}
+  "cache": {
+    "db": "moka"
+  }
 }

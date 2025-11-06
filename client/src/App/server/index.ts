@@ -4,7 +4,7 @@ import { getKeys } from "./key";
 
 import { checkServerIntegrity } from "tauri-plugin-ahqai-api"
 
-export const supportedServerSemver = "0.x";
+export const supportedServerSemver = "0.2.x";
 
 export const StatusFlags = {
   Unavailable: 2,
@@ -16,13 +16,13 @@ export const StatusFlags = {
 export enum AuthType {
   Unknown,
   OpenToAll,
-  TokenBased,
   Account
 }
 
 export class HTTPServer {
-  private url: string;
+  url: string;
   session: string;
+  flags: number = StatusFlags.Unavailable;
 
   auth = AuthType.Unknown;
 
@@ -82,8 +82,6 @@ export class HTTPServer {
       switch (output.auth as string) {
         case "OpenToAll":
           return AuthType.OpenToAll;
-        case "TokenBased":
-          return AuthType.TokenBased;
         case "Account":
           return AuthType.Account;
         default:
@@ -104,6 +102,29 @@ export class HTTPServer {
     // Auth Check
     // TODO: Auth Ping
 
+    this.flags = out;
+
     return out;
+  }
+
+  /**
+   * Throws on error
+   * @param username 
+   * @param pass 
+   */
+  async authenticate(username: string, pass: string) {
+    this.session = await fetch(`${this.url}/login`, {
+      method: "POST",
+      body: JSON.stringify({
+        username,
+        pass
+      })
+    }).then((d) => {
+      if (!d.ok) {
+        throw new Error("Invalid Credentials");
+      }
+
+      return d.text();
+    });
   }
 }

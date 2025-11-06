@@ -4,12 +4,14 @@ import useStateData from "@/App/store/state";
 import { Category } from "@/components/category";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ServerCog, PlusIcon, Trash2 } from "lucide-react";
+import { ServerCog, PlusIcon, Trash2, ScrollText } from "lucide-react";
 
 import { useState } from "react";
 import { ResponsiveDialog } from "@/components/responsive/dialog";
 
 import AddServer from "./AddServer";
+
+import license from "../../../licenses.txt?raw";
 
 export default function Settings() {
   const servers = useStateData(ServersState);
@@ -95,6 +97,36 @@ export default function Settings() {
       </div>
     </Category>
 
-    <h1 className="text-lg mt-3 mb-1">Advanced Settings</h1>
+    <h1 className="text-lg mt-3 mb-1">About & Attributions</h1>
+
+    <Category
+      title="Licenses"
+      description="Open Sourced Licenses"
+      Icon={ScrollText}
+
+    >
+      <div className="w-full rounded-lg overflow-x-hidden">
+        <pre
+          className="bg-base-100/60"
+          style={{
+            whiteSpace: 'pre-wrap', // Essential for wrapping
+            wordBreak: 'break-word', // Essential for long URLs
+            fontFamily: 'monospace', // Keeps the text looking like code/documentation
+            padding: '1em',
+          }}
+        >
+          {license}
+        </pre>
+      </div>
+    </Category>
+
+    <div className="flex flex-col justify-center items-center text-center mt-6 mb-6 text-muted-foreground gap-5">
+      <span>AHQ AI<br></br>Licensed under GPLv3</span>
+      <img width="200em" src="/gpl.svg" />
+
+      <div>
+        <a href="https://commons.wikimedia.org/wiki/File:GPLv3_Logo.svg" target="_blank" className="text-blue-600 underline">&copy; Free Software Foundation</a>, Public domain, via Wikimedia Commons
+      </div>
+    </div>
   </>;
 }

@@ -1,0 +1,6 @@
+{
+  "overwrite": true,
+  "replace": {
+    "@tauri-apps/api@2.9.0": "./node_modules/@tauri-apps/api/LICENSE_MIT"
+  }
+}
