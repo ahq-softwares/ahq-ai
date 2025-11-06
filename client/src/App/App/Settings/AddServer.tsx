@@ -228,9 +228,9 @@ async function httpLoad(url: string, setErr: (_?: string) => void, setWarn: (_?:
 
     if ((flags & StatusFlags.ChallengeFailed) > 0) {
       setErr();
-      setWarn(!true);
+      setWarn(true);
     } else {
-      setWarn(!false);
+      setWarn(false);
     }
 
     // We need no type of authentication

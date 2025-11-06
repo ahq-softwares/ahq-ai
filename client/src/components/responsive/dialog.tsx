@@ -80,7 +80,7 @@ export function ResponsiveDialog(
           </DrawerDescription>
         </DrawerHeader>
 
-        <div className="w-full h-full px-4">
+        <div className="w-full h-full px-4 overflow-x-hidden overflow-y-scroll">
           {content}
         </div>
 
