@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 
 import { Menu } from "lucide-react";
 import Settings from "./Settings";
+import Chat from "./Chat";
 
 export enum AppPage {
   Diposable = 2,
@@ -33,6 +34,8 @@ export default function Application() {
     switch (page) {
       case AppPage.Settings:
         return <Settings />
+      case AppPage.Chat:
+        return <Chat />
       default:
         return <>Hi</>;
     }

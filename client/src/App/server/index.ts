@@ -24,6 +24,7 @@ export class HTTPServer {
   session: string;
   flags: number = StatusFlags.Unavailable;
 
+  registration = false;
   auth = AuthType.Unknown;
 
   constructor(url: string, session: string) {
@@ -47,6 +48,8 @@ export class HTTPServer {
 
       return out;
     }
+
+    this.registration = output.can_register || false;
 
     const versionKey = `v${output.version}`;
 

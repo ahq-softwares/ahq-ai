@@ -4,7 +4,9 @@ import useStateData from "@/App/store/state";
 import { Category } from "@/components/category";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ServerCog, PlusIcon, Trash2, ScrollText } from "lucide-react";
+import { PlusIcon, Trash2, ScrollText } from "lucide-react";
+
+import { ServerStackIcon } from "@heroicons/react/24/outline";
 
 import { useState } from "react";
 import { ResponsiveDialog } from "@/components/responsive/dialog";
@@ -36,7 +38,7 @@ export default function Settings() {
     <Category
       title="Servers"
       description="Configure servers"
-      Icon={ServerCog}
+      Icon={ServerStackIcon}
     >
       <h1 className="mb-2">Server List</h1>
 
