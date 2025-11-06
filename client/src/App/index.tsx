@@ -22,7 +22,7 @@ export default function App() {
       // Show the window when its ready
       try {
         await initStore();
-        await getCurrentWebviewWindow().show();
+        try { await getCurrentWebviewWindow().show(); } catch (e) { }
         try {
           await getKeys();
         } catch (e) {
