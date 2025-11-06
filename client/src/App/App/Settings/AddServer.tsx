@@ -6,11 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 import { XCircle, AlertCircle, CheckCircle2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type ServerLoginState = "Initial" | "NoAuthVerify" | "AuthAccount" | "CheckingAuth" | "Connecting";
 
-export default function AddServer({ setOpen }: { setOpen: (_: boolean) => void }) {
+export default function AddServer({ setOpen, setLarge }: { setOpen: (_: boolean) => void, setLarge: (_: boolean) => void }) {
   const [state, setState] = useState<ServerLoginState>("Initial");
   const [err, setErr] = useState<string | undefined>();
   const [warn, setWarn] = useState<boolean | undefined>();
@@ -18,6 +18,10 @@ export default function AddServer({ setOpen }: { setOpen: (_: boolean) => void }
   const [err2, setErr2] = useState<string | undefined>();
 
   const [server, setSrvr] = useState<HTTPServer | undefined>();
+
+  useEffect(() => {
+    setLarge(state == "AuthAccount" || state == "CheckingAuth" || state == "NoAuthVerify");
+  }, [state]);
 
   const serverNameRef = useRef<HTMLInputElement>(null);
   const serverUrlRef = useRef<HTMLInputElement>(null);

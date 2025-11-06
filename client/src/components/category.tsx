@@ -40,8 +40,8 @@ export function Category({
           }
         }}
       >
-        <div className="size-10 my-auto">
-          <Icon size="2.25rem" className="m-auto" />
+        <div className="size-10 mr-1 my-auto flex text-center items-center justify-center">
+          <Icon size="1.75rem" className="m-auto" />
         </div>
         <div className="ml-2 w-full">
           <h1 className="text-lg select-none">{title}</h1>

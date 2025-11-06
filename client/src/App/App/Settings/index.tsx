@@ -17,16 +17,18 @@ export default function Settings() {
   const servers = useStateData(ServersState);
 
   const [open, setOpen] = useState(false);
+  const [large, setLarge] = useState(false);
 
   return <>
     <ResponsiveDialog
       open={open}
       setOpen={setOpen}
       buttonVariant={"ghost"}
+      forceLarge={large}
       title="Add Server"
       description="Enter the server information with required credentials"
       content={
-        <AddServer setOpen={setOpen} />
+        <AddServer setOpen={setOpen} setLarge={setLarge} />
       }
     />
 

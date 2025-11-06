@@ -30,6 +30,7 @@ interface DialogProps {
   title?: string;
   description?: string;
   content: React.ReactNode;
+  forceLarge?: boolean;
   open: boolean;
   setOpen: (_: boolean) => void;
 }
@@ -43,7 +44,8 @@ export function ResponsiveDialog(
     description,
     triggerButtonOverrides = false,
     open,
-    setOpen
+    setOpen,
+    forceLarge
   }: DialogProps
 ) {
   const isDesktop = useMediaQuery("(min-width: 768px)")
@@ -72,7 +74,7 @@ export function ResponsiveDialog(
       {button && <DrawerTrigger asChild>
         {triggerButtonOverrides ? button : <Button variant={buttonVariant}>{button}</Button>}
       </DrawerTrigger>}
-      <DrawerContent>
+      <DrawerContent className={forceLarge ? "h-[80vh]" : ""}>
         <DrawerHeader className="text-left">
           <DrawerTitle>{title}</DrawerTitle>
           <DrawerDescription>
