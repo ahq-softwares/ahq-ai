@@ -60,7 +60,7 @@ export default function Chat() {
     </div>
 
     <div className="w-full items-center text-center justify-center flex">
-      <InputGroup className="w-full rounded-b-none md:rounded-b-md max-h-64 md:min-w-120 md:max-w-[75%]">
+      <InputGroup className="w-full rounded-none sm:rounded-md max-h-64 md:min-w-120 sm:max-w-[75%]">
         <InputGroupTextarea
           onPaste={() => {
 

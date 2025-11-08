@@ -81,7 +81,7 @@ export default function Application() {
       </div>
     </div>
 
-    <div className="w-full h-full flex flex-col px-4 overflow-y-scroll">
+    <div className={`w-full h-full flex flex-col overflow-y-scroll ${page == AppPage.Chat || page == AppPage.Diposable || page == AppPage.ChatPage ? "sm:px-4" : "px-4"}`}>
       {content}
     </div>
   </div>;
