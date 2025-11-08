@@ -1,3 +1,5 @@
+@reference "../global.css";
+
 *:not(div) {
   @apply transition-all;
 }
@@ -8,4 +10,8 @@
 
 div[role="dialog"] {
   @apply bg-base-100/80!;
+}
+
+.chatbox {
+  @apply bg-base-100;
 }

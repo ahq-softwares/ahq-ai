@@ -1,0 +1,7 @@
+{
+  "rust-analyzer.linkedProjects": [
+    "./libahqc/Cargo.toml",
+    "./libc/Cargo.toml",
+    "./Cargo.toml"
+  ]
+}

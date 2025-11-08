@@ -1,8 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@import "./css/app.css";
-
 @plugin "daisyui" {
   prefix: dui-;
   /* corporate is light */

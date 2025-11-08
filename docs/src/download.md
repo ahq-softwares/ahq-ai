@@ -266,14 +266,16 @@ sidebar: false
 # Download
 
 AHQ AI provides two different applications:
+
 - Server
 - Client
 
 AHQ AI hosts neither the client nor the server. We assume no legal liability for use or misuse of this application.
 
-:::details ⚖️ Legal & Other Displainer
+:::details ⚖️ Legal & Other Disclaimer
 
 #### Disclaimer
+
 - AHQ AI does not provide a service.
 - AHQ AI is neither a product.
 - AHQ AI also gives you the sourced code compiled into binaries.
@@ -282,17 +284,21 @@ AHQ AI hosts neither the client nor the server. We assume no legal liability for
 - We bear no legal responsibility.
 
 #### Other Applications
+
 AHQ AI server utilizes Ollama for its functionality. We encourage you to read their own terms of service and privacy policy, as they govern the use of the Ollama component and are separate legal obligations from AHQ AI.
 
 #### Open Sourced Components
+
 AHQ AI is licensed under GPL-3.0 and utilizes many other open sourced libraries, components, frameworks for the development. Ensure that your use complies with the licenses.
 
 #### End User Liabilities
+
 - Ensure that the server you're connecting to is a officially built binary.
 - Ensure that you accept to the terms of service of the server you are connecting to.
 - Verify that the integrity of the binaries using our provided digests.
 
 #### Optional End User Recommendation
+
 - Ensure that the software you're using is signed by our Self Signed Certificates on the **Windows Platform**.
 
 :::
@@ -300,13 +306,17 @@ AHQ AI is licensed under GPL-3.0 and utilizes many other open sourced libraries,
 :::details Release Details
 
 #### Server
+
 The server is to be hosted on your personal server (which should be a capable PC for handling LLMs)
 
 #### Client
+
 The client is available for a multitude of operating systems including for mobile devices like iOS and Android.
 
 #### Types of Releases
+
 Both are client and server has two types of releases:
+
 - Stable: This is the version that is OFFICIALLY released and is recommended to be used.
 - Latest: The absolute latest version that is OFFICIALLY built by the organization.
 
@@ -314,7 +324,7 @@ Both are client and server has two types of releases:
 
 ## Client
 
-<div v-if="!releases" class="loader" style="margin-bottom:10px;margin-left: auto;margin-right:auto;"></div> 
+<div v-if="!releases" class="loader" style="margin-bottom:10px;margin-left: auto;margin-right:auto;"></div>
 
 <div v-if="releases">
 
@@ -332,6 +342,7 @@ Both are client and server has two types of releases:
 ### Download
 
 <span>Fill the parameters and download button will be shown, if build is available</span>
+
 <div class="responsive-grid" style="width:100%;gap:10px;margin-bottom:5px;">
   <Select v-model="channel" :options="channelOpt" placeholder="Select Channel" />
 
@@ -351,7 +362,7 @@ Both are client and server has two types of releases:
   v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]!=undefined"
   :href="releases.client?.[channel]?.[appTypeRef]?.[entry]?.browser_download_url">Download</a>
 
-  <span 
+<span 
   style="display:block;margin-left: auto;margin-right:auto;" 
   v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]!=undefined">Digest:<br />{{ releases.client?.[channel]?.[appTypeRef]?.[entry]?.digest }}</span>
 
@@ -359,11 +370,13 @@ Both are client and server has two types of releases:
 == MacOS
 
 #### ⚠️ Requires Additional Steps
+
 Mac users need to follow a few additional steps. Refer to [AHQ AI Client for MacOS](/install/mac)
 
 #### Download
 
 <span>Fill the parameters and download button will be shown, if build is available</span>
+
 <div class="responsive-grid" style="width:100%;gap:10px;margin-bottom:5px;">
   <Select v-model="channel" :options="channelOpt" placeholder="Select Channel" />
 
@@ -383,7 +396,7 @@ Mac users need to follow a few additional steps. Refer to [AHQ AI Client for Mac
   v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]!=undefined"
   :href="releases.client?.[channel]?.[appTypeRef]?.[entry]?.browser_download_url">Download</a>
 
-  <span 
+<span 
   style="display:block;margin-left: auto;margin-right:auto;" 
   v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]!=undefined">Digest:<br />{{ releases.client?.[channel]?.[appTypeRef]?.[entry]?.digest }}</span>
 
@@ -407,9 +420,9 @@ Mac users need to follow a few additional steps. Refer to [AHQ AI Client for Mac
   style="display:block;margin-left: auto;margin-right:auto;" 
   v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]?.[bundle]!=undefined"
   :href="releases.client?.[channel]?.[appTypeRef]?.[entry]?.[bundle]?.browser_download_url">Download</a>
-  
 
-  <span 
+
+<span 
   style="display:block;margin-left: auto;margin-right:auto;" 
   v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]?.[bundle]!=undefined">Digest:<br />{{ releases.client?.[channel]?.[appTypeRef]?.[entry]?.[bundle]?.digest }}</span>
 
@@ -435,9 +448,10 @@ Mac users need to follow a few additional steps. Refer to [AHQ AI Client for Mac
   v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]!=undefined"
   :href="releases.client?.[channel]?.[appTypeRef]?.[entry]?.browser_download_url">Download</a>
 
-  <span 
+<span 
   style="display:block;margin-left: auto;margin-right:auto;" 
   v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]!=undefined">Digest:<br />{{ releases.client?.[channel]?.[appTypeRef]?.[entry]?.digest }}</span>
+
 </div>
 == IOS
 
@@ -470,7 +484,7 @@ Please read the guide [here](/install/ios)
 
 ## Server
 
-*The Server is for advanced users and requires a separate installation of Ollama, which must be configured before running the AHQ AI Server.*
+_The Server is for advanced users and requires a separate installation of Ollama, which must be configured before running the AHQ AI Server._
 
 ### Prerequisites
 
@@ -478,13 +492,14 @@ Please read the guide [here](/install/ios)
 
 ### Download
 
-<div v-if="!releases" class="loader" style="margin-bottom:10px;margin-left: auto;margin-right:auto;"></div> 
+<div v-if="!releases" class="loader" style="margin-bottom:10px;margin-left: auto;margin-right:auto;"></div>
 
 <div v-if="releases">
 
 :::tabs key:os
 == Windows
 <span>Fill the parameters and download button will be shown, if build is available</span>
+
 <div class="responsive-grid" style="width:100%;gap:10px;margin-bottom:30px;">
   <Select v-model="channel" :options="channelOpt" placeholder="Select Channel" />
 
@@ -496,10 +511,10 @@ Please read the guide [here](/install/ios)
   v-if="releases.server?.[channel]?.[entry]"
   :href="releases.server?.[channel]?.[entry]?.browser_download_url">Download</a>
 
-  <span 
+<span 
   style="display:block;margin-left: auto;margin-right:auto;" 
   v-if="releases.server?.[channel]?.[entry]!=undefined">Digest:<br />{{ releases.server?.[channel]?.[entry]?.digest }}</span>
-  
+
 </div>
 == MacOS
 <span>Fill the parameters and download button will be shown, if build is available</span>
@@ -514,7 +529,7 @@ Please read the guide [here](/install/ios)
   v-if="releases.server?.[channel]?.[entry]"
   :href="releases.server?.[channel]?.[entry]?.browser_download_url">Download</a>
 
-  <span 
+<span 
   style="display:block;margin-left: auto;margin-right:auto;" 
   v-if="releases.server?.[channel]?.[entry]!=undefined">Digest:<br />{{ releases.server?.[channel]?.[entry]?.digest }}</span>
 
@@ -532,7 +547,7 @@ Please read the guide [here](/install/ios)
   v-if="releases.server?.[channel]?.[entry]"
   :href="releases.server?.[channel]?.[entry]?.browser_download_url">Download</a>
 
-  <span 
+<span 
   style="display:block;margin-left: auto;margin-right:auto;" 
   v-if="releases.server?.[channel]?.[entry]!=undefined">Digest:<br />{{ releases.server?.[channel]?.[entry]?.digest }}</span>
 
