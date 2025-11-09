@@ -3,8 +3,7 @@ import useStateData from "@/App/store/state";
 
 import { Category } from "@/components/category";
 import { Separator } from "@/components/ui/separator";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PlusIcon, Trash2, ScrollText } from "lucide-react";
+import { PlusIcon, ScrollText } from "lucide-react";
 
 import { ServerStackIcon } from "@heroicons/react/24/outline";
 
@@ -14,6 +13,7 @@ import { ResponsiveDialog } from "@/components/responsive/dialog";
 import AddServer from "./AddServer";
 
 import license from "../../../licenses.txt?raw";
+import ServerBlob from "./ServerBlob";
 
 export default function Settings() {
   const servers = useStateData(ServersState);
@@ -40,51 +40,15 @@ export default function Settings() {
       description="Configure servers"
       Icon={ServerStackIcon}
     >
-      <h1 className="mb-2">Server List</h1>
+      <h1 className="text-lg! mb-2">Server List</h1>
 
-      <Separator />
+      <div className="w-full my-2 gap-2">
+        {servers.map((server, i) => (
+          <ServerBlob server={server} index={i} key={`server-${i}`} />
+        ))}
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>SNo</TableHead>
-            <TableHead className="md:w-[40%]">Name</TableHead>
-            <TableHead className="md:w-[40%]">Address</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-
-        <TableBody>
-          {servers.map((value, i) =>
-          (
-            <TableRow key={value.name + value.url}>
-              <TableCell className="font-medium text-muted-foreground">{i + 1}.</TableCell>
-              <TableCell className="font-medium text-muted-foreground">{value.name}</TableCell>
-              <TableCell className="text-muted-foreground">{value.url}</TableCell>
-              <TableCell className="text-right">
-                <button
-                  className="p-1 sm:p-2 m-1 bg-error/80 text-error-content cursor-pointer rounded-md"
-                  onClick={() => {
-                    ServersState.updateValueViaCallback((v) =>
-                      v.filter((_, index) => index != i)
-                    )
-                  }}
-                >
-                  <Trash2 size="1.2rem" />
-                </button>
-              </TableCell>
-            </TableRow>)
-          )
-          }
-
-          {servers.length == 0 &&
-            <TableRow>
-              <TableCell className="font-medium text-muted-foreground text-center select-none" colSpan={3}>No Servers Found</TableCell>
-            </TableRow>
-          }
-        </TableBody>
-
-      </Table>
+        {servers.length == 0 && <span className="text-muted-foreground">No Servers Found...</span>}
+      </div>
 
       <Separator />
 
@@ -99,7 +63,7 @@ export default function Settings() {
           <span>Add</span>
         </button>
       </div>
-    </Category>
+    </Category >
 
     <h1 className="text-lg mt-3 mb-1">About & Attributions</h1>
 

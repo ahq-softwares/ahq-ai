@@ -66,7 +66,6 @@ pub async fn chat(req: HttpRequest, stream: Payload) -> Result<HttpResponse> {
 
     while let Some(msg) = stream.recv().await {
       match msg {
-        #[cfg(debug_assertions)]
         Ok(AggregatedMessage::Text(x)) => {
           let Ok::<OllamaRequest, _>(x) = serde_json::from_reader(&*x.into_bytes()) else {
             break;
@@ -79,25 +78,6 @@ pub async fn chat(req: HttpRequest, stream: Payload) -> Result<HttpResponse> {
             &mut init,
             x,
             &mut session,
-            true,
-          )
-          .await;
-        }
-        #[cfg(not(debug_assertions))]
-        Ok(AggregatedMessage::Text(_)) => break,
-        Ok(AggregatedMessage::Binary(x)) => {
-          let Ok::<OllamaRequest, _>(x) = ciborium::from_reader(&*x) else {
-            break;
-          };
-
-          model = handle_msg(
-            model,
-            &mut history,
-            img_capable,
-            &mut init,
-            x,
-            &mut session,
-            false,
           )
           .await;
         }
@@ -124,18 +104,11 @@ async fn handle_msg(
   init: &mut bool,
   msg: OllamaRequest,
   session: &mut Session,
-  using_json: bool,
 ) -> String {
-  match handle_msg_faillable(model, history, img_capable, init, msg, session, using_json).await {
+  match handle_msg_faillable(model, history, img_capable, init, msg, session).await {
     Some(model) => model,
     _ => {
-      if using_json {
-        _ = session.text(r#"{ "msg": "Internal Server Error" }"#).await;
-      } else {
-        _ = session
-          .text(r#"{ "msg": "Internal Server Error TODO: BSON" }"#)
-          .await;
-      }
+      _ = session.text(r#"{ "msg": "Internal Server Error" }"#).await;
 
       String::with_capacity(0)
     }
@@ -149,32 +122,19 @@ async fn handle_msg_faillable(
   init: &mut bool,
   msg: OllamaRequest,
   session: &mut Session,
-  using_json: bool,
 ) -> Option<String> {
   match msg {
     OllamaRequest::Init { history: hist } => {
       if *init {
-        if using_json {
-          _ = session.text(r#"{ "msg": "Already initialized" }"#).await;
-        } else {
-          _ = session
-            .text(r#"{ "msg": "Already initialized TODO: BSON" }"#)
-            .await;
-        }
+        _ = session.text(r#"{ "msg": "Already initialized" }"#).await;
 
         return Some(model);
       }
 
       if hist.len() > *HISTORY_LENGTH {
-        if using_json {
-          _ = session
+        _ = session
             .text(r#"{ "msg": "Max History length reached" }"#)
             .await;
-        } else {
-          _ = session
-            .text(r#"{ "msg": "Max History length reached TODO: BSON" }"#)
-            .await;
-        }
 
         return Some(model);
       }
@@ -209,29 +169,18 @@ async fn handle_msg_faillable(
     }
     OllamaRequest::ChatCompletion { prompt, images } => {
       if !*init {
-        if using_json {
-          _ = session
+        _ = session
             .text(r#"{ "msg": "Initialization Required" }"#)
             .await;
-        } else {
-          _ = session
-            .text(r#"{ "msg": "Initialization Required TODO: BSON" }"#)
-            .await;
-        }
 
         return Some(model);
       }
 
       if history.len() > *HISTORY_LENGTH {
-        if using_json {
-          _ = session
+        _ = session
             .text(r#"{ "msg": "Maximum message length reached!" }"#)
             .await;
-        } else {
-          _ = session
-            .text(r#"{ "msg": "Maximum message length reached TODO: BSON!" }"#)
-            .await;
-        }
+          
         return None;
       }
 
@@ -239,15 +188,9 @@ async fn handle_msg_faillable(
 
       if let Some(images) = images {
         if !img_capable {
-          if using_json {
-            _ = session
+          _ = session
               .text(r#"{ "msg": "The model is not image capable" }"#)
               .await;
-          } else {
-            _ = session
-              .text(r#"{ "msg": "The model is not image capable (TODO: BSON)" }"#)
-              .await;
-          }
           return None;
         }
 
@@ -269,15 +212,7 @@ async fn handle_msg_faillable(
         thinking: resp.message.thinking,
       };
 
-      if using_json {
-        _ = session.text(serde_json::to_string(&out).ok()?).await;
-      } else {
-        let mut bytes = vec![];
-
-        ciborium::into_writer(&out, &mut bytes).ok()?;
-
-        _ = session.binary(bytes).await;
-      }
+      _ = session.text(serde_json::to_string(&out).ok()?).await;
 
       Some(resp.model)
     }
