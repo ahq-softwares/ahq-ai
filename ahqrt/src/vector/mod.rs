@@ -20,7 +20,7 @@ const fn calc<T>(count: usize) -> usize {
 impl<T: FFISafe + Sized> Vector<T> {
   pub fn new() -> Self {
     let default_cap = 2;
-    let ptr = unsafe { libc::aligned_malloc(calc::<T>(default_cap), align_of::<T>()) };
+    let ptr = unsafe { libc::aligned_malloc(calc::<T>(default_cap), align_of::<T>().max(size_of::<*const c_void>())) };
 
     if ptr.is_null() {
       panic!("Allocation Failed");
@@ -47,7 +47,7 @@ impl<T: FFISafe + Sized> Vector<T> {
     if self.cap <= capacity {
       let new_cap = (self.cap * 2).max(capacity);
       let new_block = unsafe {
-        libc::aligned_realloc(self.ptr as _, calc::<T>(new_cap), align_of::<T>())
+        libc::aligned_realloc(self.ptr as _, calc::<T>(self.cap), calc::<T>(new_cap), align_of::<T>().max(size_of::<*const c_void>()))
       };
 
       if new_block.is_null() {
