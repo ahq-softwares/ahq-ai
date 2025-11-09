@@ -8,7 +8,7 @@ fn main() {
   println!("cargo:rustc-link-search=native=./");
   println!("cargo:rerun-if-changed=build.rs");
 
-  let target = env::var("TARGET").unwrap();
+  let target = std::env::var("TARGET").unwrap();
 
   if target.contains("linux") {
     // Linux: $ORIGIN resolves to the directory containing the executable.
