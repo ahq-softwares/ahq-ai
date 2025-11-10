@@ -1,6 +1,9 @@
 name: Build AHQ AI Server
 
 on:
+  create:
+    branches: 
+      - server-v*
   push:
     branches:
       - main
