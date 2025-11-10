@@ -1,9 +1,10 @@
 use std::ffi::c_void;
 
-pub mod vector;
-pub mod string;
-pub mod boxed;
 pub mod arc;
+pub mod boxed;
+pub mod futures;
+pub mod string;
+pub mod vector;
 
 pub unsafe trait FFISafe {}
 

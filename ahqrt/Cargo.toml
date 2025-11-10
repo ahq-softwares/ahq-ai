@@ -5,3 +5,5 @@ edition = "2024"
 
 [dependencies]
 libc = { path = "./libc" }
+
+tokio = { version = "^1", features = ["rt", "sync", "time"] }

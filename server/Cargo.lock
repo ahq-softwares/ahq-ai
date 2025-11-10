@@ -229,7 +229,7 @@ dependencies = [
 
 [[package]]
 name = "ahqai-server"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "actix-web",
  "actix-ws",
@@ -267,6 +267,7 @@ name = "ahqrt"
 version = "0.1.0"
 dependencies = [
  "libc 0.1.0",
+ "tokio",
 ]
 
 [[package]]

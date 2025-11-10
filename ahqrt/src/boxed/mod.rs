@@ -1,15 +1,20 @@
-use std::{ffi::c_void, marker::PhantomData, ops::{Deref, DerefMut}, ptr};
+use std::{
+  ffi::c_void,
+  marker::PhantomData,
+  ops::{Deref, DerefMut},
+  ptr,
+};
 
 use crate::FFISafe;
 
 #[repr(C)]
 pub struct RTSafeBoxWrapper {
   _data: *mut c_void,
-  _free: unsafe extern "C" fn(data: *mut c_void)
+  _free: unsafe extern "C" fn(data: *mut c_void),
 }
 
 unsafe extern "C" fn mfree<T>(data: *mut c_void) {
-  unsafe { 
+  unsafe {
     ptr::drop_in_place(data as *mut T);
     libc::aligned_free(data);
   }
@@ -30,7 +35,7 @@ impl RTSafeBoxWrapper {
 
       let structdata = Self {
         _data: _data as _,
-        _free: mfree::<T>
+        _free: mfree::<T>,
       };
 
       let structdata_ptr = libc::aligned_malloc(size_of::<Self>(), align_of::<Self>()) as *mut Self;
@@ -45,7 +50,7 @@ impl RTSafeBoxWrapper {
       RTBox {
         _wrap: structdata_ptr,
         _data: PhantomData,
-        poisoned: false    
+        poisoned: false,
       }
     }
   }
@@ -53,15 +58,22 @@ impl RTSafeBoxWrapper {
   /// You, the developer is required to ensure that `T` is correct
   /// This constructs a Wrapper Type that's not FFI-able
   pub unsafe fn construct<T: FFISafe>(pointer: *mut RTSafeBoxWrapper) -> RTBox<T> {
-    RTBox { _wrap: pointer, _data: PhantomData, poisoned: false }
+    RTBox {
+      _wrap: pointer,
+      _data: PhantomData,
+      poisoned: false,
+    }
   }
 }
 
 pub struct RTBox<T: FFISafe> {
   _wrap: *mut RTSafeBoxWrapper,
   _data: PhantomData<T>,
-  poisoned: bool
+  poisoned: bool,
 }
+
+unsafe impl<T: FFISafe> Send for RTBox<T> {}
+unsafe impl<T: FFISafe> Sync for RTBox<T> {}
 
 impl<T: FFISafe> RTBox<T> {
   pub fn into_raw(mut self) -> *mut RTSafeBoxWrapper {
