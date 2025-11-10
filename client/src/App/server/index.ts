@@ -55,7 +55,7 @@ export class HTTPServer {
 
     this.registration = output.can_register || false;
 
-    const versionKey = `v0.3.1`//`v${output.version}`;
+    const versionKey = `v${output.version}`;
 
     if (!keys[versionKey]) out |= StatusFlags.ChallengeFailed;
 
