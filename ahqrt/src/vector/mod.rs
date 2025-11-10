@@ -1,4 +1,5 @@
 use std::{num::NonZeroUsize, ops::{Index, IndexMut}, ptr};
+use core::ffi::c_void;
 
 use crate::FFISafe;
 
