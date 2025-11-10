@@ -11,6 +11,7 @@ on:
       - .github/workflows/pages.yml
       - genServerTag.ps1
       - keygen/**
+      - ahqrt/**
 
 permissions: write-all
 
