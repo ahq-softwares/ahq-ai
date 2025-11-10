@@ -16,12 +16,12 @@ sidebar: false
 
   const parseServerAssets = (assets) => {
     return {
-      winX64: assets.find((d) => d.name=="ahqai-server-x86_64-pc-windows-msvc.exe"),
-      winArm: assets.find((d) => d.name=="ahqai-server-aarch64-pc-windows-msvc.exe"),
-      linuxX64: assets.find((d) => d.name=="ahqai-server-x86_64-unknown-linux-gnu"),
-      linuxArm: assets.find((d) => d.name=="ahqai-server-aarch64-unknown-linux-gnu"),
-      macX64: assets.find((d) => d.name=="ahqai-server-x86_64-apple-darwin"),
-      macArm: assets.find((d) => d.name=="ahqai-server-aarch64-apple-darwin")
+      winX64: assets.find((d) => d.name=="ahqai-server-x86_64-pc-windows-msvc.zip"),
+      winArm: assets.find((d) => d.name=="ahqai-server-aarch64-pc-windows-msvc.zip"),
+      linuxX64: assets.find((d) => d.name=="ahqai-server-x86_64-unknown-linux-gnu.zip"),
+      linuxArm: assets.find((d) => d.name=="ahqai-server-aarch64-unknown-linux-gnu.zip"),
+      macX64: assets.find((d) => d.name=="ahqai-server-x86_64-apple-darwin.zip"),
+      macArm: assets.find((d) => d.name=="ahqai-server-aarch64-apple-darwin.zip")
     }
   }
 
@@ -420,7 +420,6 @@ Mac users need to follow a few additional steps. Refer to [AHQ AI Client for Mac
   style="display:block;margin-left: auto;margin-right:auto;" 
   v-if="releases.client?.[channel]?.[appTypeRef]?.[entry]?.[bundle]!=undefined"
   :href="releases.client?.[channel]?.[appTypeRef]?.[entry]?.[bundle]?.browser_download_url">Download</a>
-
 
 <span 
   style="display:block;margin-left: auto;margin-right:auto;" 
