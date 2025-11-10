@@ -2,15 +2,18 @@ import { fetch } from "@tauri-apps/plugin-http";
 import { satisfies } from "semver"
 import { getKeys } from "./key";
 
+import { parse } from "date-fns"
+
 import { checkServerIntegrity } from "tauri-plugin-ahqai-api"
 
-export const supportedServerSemver = "0.2.x";
+export const supportedServerSemver = ">=0.2.x";
 
 export const StatusFlags = {
   Unavailable: 2,
   Unauthorized: 4,
   UnsupportedServerVersion: 8,
-  ChallengeFailed: 16
+  ChallengeFailed: 16,
+  ExpiresSoon: 32,
 }
 
 export enum AuthType {
@@ -26,6 +29,7 @@ export class HTTPServer {
 
   registration = false;
   auth = AuthType.Unknown;
+  expiry: Date | undefined = undefined;
 
   constructor(url: string, session: string) {
     this.url = url, this.session = session;
@@ -51,12 +55,20 @@ export class HTTPServer {
 
     this.registration = output.can_register || false;
 
-    const versionKey = `v${output.version}`;
+    const versionKey = `v0.3.1`//`v${output.version}`;
 
-    if (!keys[versionKey]) out |= (StatusFlags.ChallengeFailed || StatusFlags.UnsupportedServerVersion);
+    if (!keys[versionKey]) out |= StatusFlags.ChallengeFailed;
 
     if (keys[versionKey]) {
       const pubkey = keys[versionKey].pubkey;
+      const expiry = keys[versionKey]?.expiry;
+
+      if (expiry) {
+        const date = parse(expiry, 'EEE, dd MMM yyyy HH:mm:ss \'GMT\'', new Date());
+
+        this.expiry = date;
+        out |= StatusFlags.ExpiresSoon;
+      }
 
       const data = new Uint8Array(256);
 
@@ -84,6 +96,7 @@ export class HTTPServer {
     this.auth = (() => {
       switch (output.auth as string) {
         case "OpenToAll":
+          this.session = "no-auth";
           return AuthType.OpenToAll;
         case "Account":
           return AuthType.Account;

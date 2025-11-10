@@ -44,7 +44,7 @@ export default function Settings() {
 
       <div className="w-full my-2 gap-2">
         {servers.map((server, i) => (
-          <ServerBlob server={server} index={i} key={`server-${i}`} />
+          <ServerBlob server={server} index={i} key={`server-${server.url}-${server.name}-${i}`} />
         ))}
 
         {servers.length == 0 && <span className="text-muted-foreground">No Servers Found...</span>}

@@ -3,11 +3,15 @@ import { State } from "../state";
 
 import { BaseDirectory, mkdir, readTextFile, writeTextFile } from "@tauri-apps/plugin-fs"
 
-export interface Server {
+export interface JSONServer {
   name: string;
   url: string;
   session: string;
-  status: number;
+}
+
+export interface Server {
+  name: string;
+  url: string;
   instance: HTTPServer
 }
 
@@ -23,7 +27,7 @@ export async function initServerState() {
     baseDir: BaseDirectory.AppData
   }).catch(() => "");
 
-  let val: Server[];
+  let val: JSONServer[];
 
   try {
     val = JSON.parse(serverJsonData);
@@ -39,13 +43,17 @@ export async function initServerState() {
   ServersState.value = outValue;
 
   ServersState.registerListener((data) => {
-    writeTextFile("server.json", JSON.stringify(data.map((server) => ({ name: server.name, url: server.url, session: server.session }))), {
+    writeTextFile("server.json", JSON.stringify(data.map((server) => ({
+      name: server.name,
+      url: server.url,
+      session: server.instance.session
+    }))), {
       baseDir: BaseDirectory.AppData
     }).catch(console.error)
   });
 }
 
-async function checkServers(val: Server[]): Promise<Server[]> {
+async function checkServers(val: JSONServer[]): Promise<Server[]> {
   return await Promise.all(
     val.map(async (data) => {
       const inst = new HTTPServer(data.url, data.session);

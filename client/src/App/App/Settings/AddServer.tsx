@@ -114,10 +114,8 @@ export default function AddServer({ setOpen, setLarge }: { setOpen: (_: boolean)
             ServersState.updateValueViaCallback((val) => {
               val.push({
                 instance: server!!,
-                session: "no-auth",
                 name: serverFriendlyName,
                 url: server!!.url,
-                status: server!!.flags
               });
 
               return val;
@@ -151,10 +149,8 @@ export default function AddServer({ setOpen, setLarge }: { setOpen: (_: boolean)
                   ServersState.updateValueViaCallback((val) => {
                     val.push({
                       instance: server!!,
-                      session: server!!.session,
                       name: serverFriendlyName,
                       url: server!!.url,
-                      status: server!!.flags
                     });
 
                     return val;

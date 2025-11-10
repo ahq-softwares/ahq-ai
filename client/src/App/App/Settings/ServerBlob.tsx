@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 
-import { CloudXIcon, CloudIcon, CloudWarningIcon, CloudSlashIcon, SmileyXEyesIcon } from "@phosphor-icons/react"
+import { CloudXIcon, CloudIcon, CloudWarningIcon, CloudSlashIcon, SmileyXEyesIcon, ClockCountdownIcon } from "@phosphor-icons/react"
 import { AlertCircleIcon, AlertTriangleIcon, LogIn, MoreHorizontalIcon, Trash2Icon } from "lucide-react";
 import { ReactNode, useMemo } from "react";
 
@@ -25,6 +25,17 @@ export default function ServerBlob({ server, index }: { server: ServerType, inde
         </Alert>
       );
     }
+    if ((flags & (StatusFlags.ExpiresSoon)) > 0) {
+      err.push(
+        <Alert>
+          <ClockCountdownIcon className="text-warning!" />
+          <AlertTitle>Expires Soon</AlertTitle>
+          <AlertDescription>
+            <span>This version of AHQ AI Server will expire on <strong className="text-error">{server.instance.expiry?.toLocaleDateString()}</strong> at <strong className="text-error">{server.instance.expiry?.toLocaleTimeString()}</strong></span>
+          </AlertDescription>
+        </Alert>
+      );
+    }
     if ((flags & (StatusFlags.Unauthorized)) > 0) {
       err.push(
         <Alert variant="destructive">
@@ -34,7 +45,7 @@ export default function ServerBlob({ server, index }: { server: ServerType, inde
         </Alert>
       );
     }
-    if ((flags && (StatusFlags.ChallengeFailed)) > 0) {
+    if ((flags & (StatusFlags.ChallengeFailed)) > 0) {
       err.push(
         <Alert variant="destructive">
           <AlertTriangleIcon />
@@ -43,7 +54,7 @@ export default function ServerBlob({ server, index }: { server: ServerType, inde
         </Alert>
       );
     }
-    if ((flags && StatusFlags.UnsupportedServerVersion) > 0) {
+    if ((flags & StatusFlags.UnsupportedServerVersion) > 0) {
       err.push(
         <Alert variant="destructive">
           <SmileyXEyesIcon />
@@ -63,6 +74,8 @@ export default function ServerBlob({ server, index }: { server: ServerType, inde
       return <CloudSlashIcon className="size-8 text-warning" />;
     } else if ((flags & (StatusFlags.Unauthorized)) > 0) {
       return <CloudXIcon className="size-8 text-error" />;
+    } else if ((flags & (StatusFlags.ExpiresSoon)) > 0) {
+      return <ClockCountdownIcon className="size-8 text-warning" />;
     } else if ((flags && (StatusFlags.ChallengeFailed)) > 0) {
       return <CloudWarningIcon className="size-8 text-warning" />;
     } else if ((flags && StatusFlags.UnsupportedServerVersion) > 0) {
@@ -93,7 +106,7 @@ export default function ServerBlob({ server, index }: { server: ServerType, inde
 
           <HoverCardContent className="flex flex-col w-[30rem] max-h-72 overflow-y-scroll overflow-x-hidden bg-base-100/70 gap-2">
             {
-              errors.map((x) => <div className="w-full flex flex-col">{x}</div>)
+              errors.map((x, i) => <div key={`err-${i}`} className="w-full flex flex-col">{x}</div>)
             }
           </HoverCardContent>
         </HoverCard>

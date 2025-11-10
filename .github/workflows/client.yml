@@ -1,6 +1,10 @@
 name: Build AHQ AI Client
 
 on:
+  create:
+    branches:
+      - client-v*
+
   push:
     branches:
       - main
