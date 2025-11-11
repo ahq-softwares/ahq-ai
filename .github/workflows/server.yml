@@ -98,10 +98,6 @@ jobs:
 
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            allocator: jemalloc
-
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
             allocator: mimalloc
 
             # Windows ARM64
@@ -111,20 +107,12 @@ jobs:
 
           - os: windows-latest
             target: aarch64-pc-windows-msvc
-            allocator: jemalloc
-
-          - os: windows-latest
-            target: aarch64-pc-windows-msvc
             allocator: mimalloc
 
             # Macos
           - os: macos-latest
             target: x86_64-apple-darwin
             allocator: stdalloc
-
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            allocator: jemalloc
 
           - os: macos-latest
             target: x86_64-apple-darwin
