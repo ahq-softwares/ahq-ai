@@ -49,9 +49,7 @@ libloading = "^0.9"
 ahqrt = { version = "^0.1", path = "../ahqrt" }
 
 mimalloc = { version = "^0.1", optional = true }
-tikv-jemallocator = { version = "^0.6", features = [
-  "alloc_trait",
-], optional = true }
+tikv-jemallocator = { version = "^0.6", optional = true }
 
 [profile.release]
 debug = false
