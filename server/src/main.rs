@@ -9,7 +9,7 @@ pub(crate) mod structs;
 
 use chalk_rs::Chalk;
 
-#[cfg(feature = "sysalloc")]
+#[cfg(feature = "stdalloc")]
 #[global_allocator]
 static GLOBAL: std::alloc::System = std::alloc::System;
 

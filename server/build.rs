@@ -9,13 +9,13 @@ macro_rules! check_exclusive {
 
 fn main() {
   #[cfg(not(any(
-    feature = "sysalloc", 
+    feature = "stdalloc", 
     feature = "mimalloc", 
     feature = "jemalloc"
   )))]
-  compile_error!("One of the features 'sysalloc, 'mimalloc' or 'jemalloc' should be enabled");
+  compile_error!("One of the features 'stdalloc, 'mimalloc' or 'jemalloc' should be enabled");
   
-  check_exclusive!("sysalloc", "mimalloc");
-  check_exclusive!("sysalloc", "jemalloc");
+  check_exclusive!("stdalloc", "mimalloc");
+  check_exclusive!("stdalloc", "jemalloc");
   check_exclusive!("mimalloc", "jemalloc");
 }

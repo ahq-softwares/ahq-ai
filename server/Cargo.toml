@@ -62,7 +62,7 @@ lto = true
 codegen-units = 1
 
 [features]
-default = ["sysalloc"]
-sysalloc = []
+default = ["stdalloc"]
+stdalloc = []
 jemalloc = ["dep:tikv-jemallocator"]
 mimalloc = ["dep:mimalloc"]
