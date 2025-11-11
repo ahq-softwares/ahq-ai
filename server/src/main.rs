@@ -9,6 +9,18 @@ pub(crate) mod structs;
 
 use chalk_rs::Chalk;
 
+#[cfg(feature = "sysalloc")]
+#[global_allocator]
+static GLOBAL: std::alloc::System = std::alloc::System;
+
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+#[cfg(feature = "jemalloc")]
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
 fn main() {
   panic::set_hook(Box::new(|x| {
     let mut chalk = Chalk::new();

@@ -9,6 +9,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { CloudXIcon, CloudIcon, CloudWarningIcon, CloudSlashIcon, SmileyXEyesIcon, ClockCountdownIcon } from "@phosphor-icons/react"
 import { AlertCircleIcon, AlertTriangleIcon, LogIn, MoreHorizontalIcon, Trash2Icon } from "lucide-react";
 import { ReactNode, useMemo } from "react";
+import { AuthType } from "../../server";
 
 export default function ServerBlob({ server, index }: { server: ServerType, index: number }) {
   const errors = useMemo(() => {
@@ -128,7 +129,7 @@ export default function ServerBlob({ server, index }: { server: ServerType, inde
           <DropdownMenuLabel>Account</DropdownMenuLabel>
 
           <DropdownMenuGroup>
-            <DropdownMenuItem>
+            <DropdownMenuItem disabled={server.instance.auth == AuthType.OpenToAll}>
               <LogIn />
               Reauthenticate
             </DropdownMenuItem>

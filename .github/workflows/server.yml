@@ -2,7 +2,7 @@ name: Build AHQ AI Server
 
 on:
   create:
-    branches: 
+    branches:
       - server-v*
   push:
     branches:
@@ -90,6 +90,8 @@ jobs:
       fail-fast: true
 
       matrix:
+        allocator: ["stdalloc", "jemalloc", "mimalloc"]
+
         include:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -138,6 +140,7 @@ jobs:
         run: |
           ./prebuild.ps1
         env:
+          ALLOC: ${{ matrix.allocator }}
           TARGET: ${{ matrix.target }}
           VERSION: ${{ needs.create.outputs.app_version }}
 

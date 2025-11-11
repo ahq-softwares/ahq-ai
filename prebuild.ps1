@@ -1,4 +1,5 @@
 $target = $env:TARGET
+$alloc = $env:ALLOC
 
 Remove-Item -Path dist -Recurse -ErrorAction SilentlyContinue
 New-Item -Path dist -ItemType Directory -Force
@@ -24,7 +25,7 @@ Copy-Item -Path .\ahqrt\libahqc\target\$target\release\*ahqc.* -Destination .\se
 
 Set-Location .\server
 
-cargo build --release --target $target
+cargo build --release --target $target --no-default-features --features $alloc
 
 Set-Location ..
 
@@ -40,4 +41,4 @@ Copy-Item -Path .\parts\* -Destination .\dist\ -Recurse
 
 "$env:VERSION" > .\dist\.version
 
-Compress-Archive -Path .\dist\* -DestinationPath .\ahqai-server-$target.zip -Update
+Compress-Archive -Path .\dist\* -DestinationPath .\ahqai-server-$target-$alloc.zip -Update

@@ -1,6 +1,6 @@
 [package]
 name = "ahqai-server"
-version = "0.3.0"
+version = "0.3.2"
 edition = "2024"
 license = "GPL-3.0"
 authors = ["A. Chakraborty", "AHQ AI"]
@@ -48,6 +48,11 @@ libloading = "^0.9"
 
 ahqrt = { version = "^0.1", path = "../ahqrt" }
 
+mimalloc = { version = "^0.1", optional = true }
+tikv-jemallocator = { version = "^0.6", features = [
+  "alloc_trait",
+], optional = true }
+
 [profile.release]
 debug = false
 debug-assertions = false
@@ -55,3 +60,9 @@ strip = "symbols"
 opt-level = 3
 lto = true
 codegen-units = 1
+
+[features]
+default = ["sysalloc"]
+sysalloc = []
+jemalloc = ["dep:tikv-jemallocator"]
+mimalloc = ["dep:mimalloc"]
