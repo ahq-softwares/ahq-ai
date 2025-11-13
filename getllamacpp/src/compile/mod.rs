@@ -34,6 +34,9 @@ pub fn compile() {
                                                /____/   
   ");
 
+  #[cfg(target_os = "macos")]
+  println!("> On macos, Metal is automatically selected, if available");
+
   let mut cmd = "cmake -B build -DCMAKE_BUILD_TYPE=release".to_string();
 
   if Confirm::new("Do you want curl support (required libcurl to be installed)?")
@@ -68,7 +71,7 @@ pub fn compile() {
     .prompt_skippable()
     .unwrap()
     .unwrap_or_default() {
-      cmd.push(" -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS");
+      cmd.push_str(" -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS");
     }
 
   let exists = fs::exists("./llama.cpp").unwrap();
