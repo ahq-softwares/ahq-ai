@@ -19,6 +19,16 @@ Set-Location ..\..
 Copy-Item -Path .\ahqrt\libahqc\target\$target\release\*ahqc.* -Destination .\dist -Recurse
 
 ##
+## Get llama cpp tool
+##
+Set-Location .\getllamacpp
+
+cargo build --release --target $target
+Copy-Item -Path .\ahqrt\libahqc\target\$target\release\*getllamacpp.* -Destination .\server -Recurse
+
+Set-Location ..
+
+##
 ## Server
 ##
 Copy-Item -Path .\ahqrt\libahqc\target\$target\release\*ahqc.* -Destination .\server -Recurse
