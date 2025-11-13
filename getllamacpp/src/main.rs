@@ -11,7 +11,16 @@ use std::process;
 #[tokio::main]
 #[cfg(not(all(any(windows, target_os = "linux"), target_arch = "x86_64")))]
 async fn main() {
-  println!("We must compile llama.cpp");
+  println!(r"
+      ___    __  ______      ___    ____
+   /   |  / / / / __ \    /   |  /  _/
+  / /| | / /_/ / / / /   / /| |  / /  
+ / ___ |/ __  / /_/ /   / ___ |_/ /   
+/_/  |_/_/ /_/\___\_\  /_/  |_/___/   
+                                    
+
+> Must compile llama.cpp
+  ");
 
   let resp = Confirm::new("Do you have C/C++ tools like `cmake` and `git` installed?")
     .with_default(true)
