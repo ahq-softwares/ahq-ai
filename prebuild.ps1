@@ -24,7 +24,7 @@ Copy-Item -Path .\ahqrt\libahqc\target\$target\release\*ahqc.* -Destination .\di
 Set-Location .\getllamacpp
 
 cargo build --release --target $target
-Copy-Item -Path .\getllamacpp\target\$target\release\*getllamacpp* -Destination .\server -Recurse
+Copy-Item -Path .\target\$target\release\*getllamacpp* -Destination .\server -Recurse
 
 Set-Location ..
 
