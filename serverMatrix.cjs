@@ -22,7 +22,7 @@ const arm64Suffix = [
 ];
 
 const appleArmSuffix = [
-  ...arm64Suffix,
+  ["", ""],
   ["apple-m4", "-C target-feature=+apple-m4"],
 ];
 
