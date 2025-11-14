@@ -16,7 +16,7 @@ use serde_json::from_str;
 
 pub mod admin;
 pub mod auth;
-pub mod chat;
+// pub mod chat;
 pub mod http;
 
 pub mod llama;
@@ -74,7 +74,7 @@ pub async fn main() -> std::io::Result<()> {
   let mut server = HttpServer::new(move || {
     let mut app = App::new()
       .service(http::index)
-      .route("/chat", web::get().to(chat::chat))
+      // .route("/chat", web::get().to(chat::chat))
       .service(http::challenge)
       .service(http::me);
 
