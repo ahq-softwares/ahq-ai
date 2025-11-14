@@ -17,6 +17,7 @@ on:
       - keygen/**
       - getllamacpp/**
       - ahqrt/**
+      - prebuild.ps1
 
 permissions: write-all
 
