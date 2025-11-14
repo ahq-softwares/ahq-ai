@@ -51,4 +51,12 @@ Copy-Item -Path .\parts\* -Destination .\dist\ -Recurse
 
 "$env:VERSION" > .\dist\.version
 
-Compress-Archive -Path .\dist\* -DestinationPath .\ahqai-server-$target-$alloc.zip -Update
+$feat = $env:SUFFIX
+
+$feature = ""
+
+if ($feat -ne "") {
+  $feature = "-$feat"
+}
+
+Compress-Archive -Path .\dist\* -DestinationPath .\ahqai-server-$target-$alloc$feature.zip -Update

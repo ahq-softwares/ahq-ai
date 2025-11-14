@@ -9,6 +9,7 @@ on:
       - main
       - server-v*
     paths:
+      - serverMatrix.cjs
       - server/**
       - .github/workflows/server.yml
       - .github/workflows/pages.yml
@@ -24,6 +25,7 @@ jobs:
     name: Create Release
 
     outputs:
+      matrix: ${{ steps.matrices.outputs.result }}
       upload_url: ${{ steps.rel.outputs.upload_url }}
       release_id: ${{ steps.rel.outputs.id }}
       app_version: ${{ steps.tag.outputs.abs }}
@@ -44,6 +46,15 @@ jobs:
           ./genServerTag.ps1
         env:
           BRANCH_NAME: ${{ github.ref_name }}
+
+      - name: Generate Matrices
+        uses: actions/github-script@v8
+        id: matrices
+        with:
+          script: |
+            const out = require("./serverMatrix.cjs");
+
+            return out();
 
       - name: Generate Cryptographically Safe Public Key
         run: |
@@ -91,72 +102,7 @@ jobs:
       fail-fast: true
 
       matrix:
-        include:
-          # Windows
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            allocator: stdalloc
-
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            allocator: mimalloc
-
-            # Windows ARM64
-          - os: windows-latest
-            target: aarch64-pc-windows-msvc
-            allocator: stdalloc
-
-          - os: windows-latest
-            target: aarch64-pc-windows-msvc
-            allocator: mimalloc
-
-            # Macos
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            allocator: stdalloc
-
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            allocator: mimalloc
-
-            # Arm64 Macos
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            allocator: stdalloc
-
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            allocator: jemalloc
-
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            allocator: mimalloc
-
-            # Linux X64
-          - os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            allocator: stdalloc
-
-          - os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            allocator: mimalloc
-
-          - os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            allocator: jemalloc
-
-            # Linux Arm64
-          - os: ubuntu-22.04-arm
-            target: aarch64-unknown-linux-gnu
-            allocator: stdalloc
-
-          - os: ubuntu-22.04-arm
-            target: aarch64-unknown-linux-gnu
-            allocator: mimalloc
-
-          - os: ubuntu-22.04-arm
-            target: aarch64-unknown-linux-gnu
-            allocator: jemalloc
+        include: ${{ fromJson(needs.create.outputs.matrix) }}
 
     steps:
       - name: Checkout
@@ -168,6 +114,7 @@ jobs:
           toolchain: nightly
           target: ${{ matrix.target }}
           components: rustfmt
+          rustflags: ${{ matrix.rustflags }}
 
       - name: Setup NodeJS
         uses: actions/setup-node@v5
@@ -187,6 +134,7 @@ jobs:
         run: |
           ./prebuild.ps1
         env:
+          SUFFIX: ${{ matrix.end }}
           ALLOC: ${{ matrix.allocator }}
           TARGET: ${{ matrix.target }}
           VERSION: ${{ needs.create.outputs.app_version }}

@@ -11,7 +11,6 @@ use crate::{
 use actix_web::{App, HttpServer, web};
 use bcrypt::verify;
 use chalk_rs::Chalk;
-use ollama_rs::Ollama;
 use secrecy::SecretString;
 use serde_json::from_str;
 
@@ -19,6 +18,8 @@ pub mod admin;
 pub mod auth;
 pub mod chat;
 pub mod http;
+
+pub mod llama;
 
 pub mod ffi;
 
@@ -35,9 +36,6 @@ pub static HISTORY_LENGTH: LazyLock<usize> = LazyLock::new(|| CONFIG.ollama.msgs
 pub static AUTH: OnceLock<AuthSessionManager> = OnceLock::new();
 
 pub static REAL_ADMIN_PASSWORD: OnceLock<SecretString> = OnceLock::new();
-
-pub static OLLAMA: LazyLock<Ollama> =
-  LazyLock::new(|| Ollama::new(CONFIG.ollama.host.as_ref(), CONFIG.ollama.port));
 
 pub fn launch() -> Chalk {
   let mut chalk = Chalk::new();
@@ -69,14 +67,6 @@ pub async fn main() -> std::io::Result<()> {
     }
 
     _ = AUTH.set(AuthSessionManager::create().await);
-  }
-
-  if OLLAMA.list_local_models().await.is_err() {
-    println!("----------------");
-    chalk
-      .red()
-      .println(&"Connection to ollama failed. Are you sure configuration is correct?");
-    println!("----------------");
   }
 
   let admin_api = request_admin_passwd();

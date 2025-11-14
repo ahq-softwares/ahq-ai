@@ -25,10 +25,6 @@ tikv-client = "^0.3"
 mongodb = "^3"
 moka = { version = "^0.12", features = ["future"] }
 
-ollama-rs = { version = "^0.3", git = "https://github.com/pepperoni21/ollama-rs", features = [
-  "stream",
-] }
-
 serde = { version = "^1", features = ["derive"] }
 serde_json = "^1"
 
@@ -36,13 +32,14 @@ async-recursion = "^1"
 async-stream = "^0.3"
 async-trait = "^0.1"
 tokio = { version = "^1", features = ["fs", "sync", "rt"] }
-thiserror = "^2"
-chalk_rs = "^1"
 crossbeam-channel = "^0.5"
 futures = "^0.3"
 
+thiserror = "^2"
+chalk_rs = "^1"
 fern = "^0.7"
 log = "^0.4"
+humantime = "^2"
 
 libloading = "^0.9"
 
@@ -50,6 +47,11 @@ ahqrt = { version = "^0.1", path = "../ahqrt" }
 
 mimalloc = { version = "^0.1", optional = true }
 tikv-jemallocator = { version = "^0.6", optional = true }
+
+reqwest = { version = "^0.12", features = [
+  "json",
+  "rustls-tls",
+], default-features = false }
 
 [profile.release]
 debug = false

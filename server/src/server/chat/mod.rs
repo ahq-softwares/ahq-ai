@@ -1,13 +1,9 @@
 use crate::server::{
-  AUTH, CONFIG, HISTORY_LENGTH, OLLAMA,
+  AUTH, CONFIG, HISTORY_LENGTH,
   chat::ollama::{Message, OllamaMsgResp, OllamaRequest},
 };
 use actix_web::{HttpRequest, HttpResponse, Result, rt, web::Payload};
 use actix_ws::{AggregatedMessage, Session};
-use ollama_rs::generation::{
-  chat::{ChatMessage, MessageRole, request::ChatMessageRequest},
-  images::Image,
-};
 
 pub mod ollama;
 

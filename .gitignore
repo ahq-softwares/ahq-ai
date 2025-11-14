@@ -4,3 +4,5 @@ node_modules
 .secret
 keystore.properties
 dist
+getllamacpp/gemma.gguf
+getllamacpp/llama.gguf
