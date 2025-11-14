@@ -1,6 +1,5 @@
 const x64suffix = [
-  ["", "-C target-cpu=x86-64"],
-  ["avx", "-C target-cpu=x86-64 -C target-feature=+avx"],
+  ["", "-C target-cpu=x86-64 -C target-feature=+avx"],
   ["x86_64-v2", "-C target-cpu=x86-64-v2"],
   ["x86_64-v3", "-C target-cpu=x86-64-v3"],
   ["x86_64-v4", "-C target-cpu=x86-64-v4"],
@@ -15,10 +14,7 @@ const arm64Suffix = [
   ["", "-C target-cpu=generic"],
   ["neon", "-C target-feature=+neon"],
   ["v8a", "-C target-feature=+v8a,+neon"],
-  ["v8.9a", "-C target-feature=+v8.9a,+neon"],
   ["v9a", "-C target-feature=+v9a,+neon"],
-  ["v9.5a", "-C target-feature=+v9.5a,+neon"],
-  ["v9.6a", "-C target-feature=+v9.6a,+neon"],
 ];
 
 const appleArmSuffix = [
