@@ -7,7 +7,6 @@ on:
   push:
     branches:
       - main
-      - server-v*
     paths:
       - serverMatrix.cjs
       - server/**
