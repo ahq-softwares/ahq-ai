@@ -12,7 +12,6 @@ const x64suffix = [
 
 const arm64Suffix = [
   ["", "-C target-cpu=generic"],
-  ["neon", "-C target-feature=+neon"],
   ["v8a", "-C target-feature=+v8a,+neon"],
   ["v9a", "-C target-feature=+v9a,+neon"],
 ];
