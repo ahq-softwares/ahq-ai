@@ -4,10 +4,11 @@ const x64suffix = [
   ["x86_64-v2", "-C target-cpu=x86-64-v2"],
   ["x86_64-v3", "-C target-cpu=x86-64-v3"],
   ["x86_64-v4", "-C target-cpu=x86-64-v4"],
-  // [
-  //   "x86_64-v4-amx",
-  //   "-C target-cpu=x86-64-v4 -C target-feature=+amx-avx512,+amx-bf16,+amx-complex,+amx-fp16,+amx-fp8,+amx-int8,+amx-movrs,+amx-tf32,+amx-tile",
-  // ],
+  // Removed unsound featureset
+  [
+    "x86_64-v4-amx",
+    "-C target-cpu=x86-64-v4 -C target-feature=+amx-avx512,+amx-bf16,+amx-complex,+amx-fp16,+amx-fp8,+amx-int8,+amx-movrs,+amx-tf32,+amx-tile",
+  ],
 ];
 
 const arm64Suffix = [
