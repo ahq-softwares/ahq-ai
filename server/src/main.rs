@@ -1,6 +1,7 @@
 #![feature(duration_constructors)]
 use std::{env::args, panic};
 
+mod log;
 mod server;
 mod ui;
 
@@ -71,6 +72,7 @@ fn main() {
   if config_ui {
     ui::ui();
   } else {
+    log::setup();
     server::main().unwrap();
   }
 }

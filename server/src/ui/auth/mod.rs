@@ -40,6 +40,7 @@ pub fn auth_page(
           Authentication::OpenToAll => open::render(layout),
           Authentication::Account {
             registration_allowed,
+            ..
           } => user::render(layout, registration_allowed),
         }
       });

@@ -37,10 +37,10 @@ Set-Location .\server
 
 cargo build --release --target $target --no-default-features --features $alloc
 
-Set-Location ..
-
 ## Copy
-Copy-Item -Path .\server\target\$target\release\*ahqai-server* -Destination .\dist -Recurse
+Copy-Item -Path .\target\$target\release\*ahqai-server* -Destination ..\dist -Recurse
+
+Set-Location ..
 
 ##
 ##

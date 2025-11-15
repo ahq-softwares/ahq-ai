@@ -9,7 +9,8 @@ authors = ["A. Chakraborty", "AHQ AI"]
 actix-web = "^4"
 actix-ws = "^0.3"
 
-bcrypt = "^0.17"
+argon2 = { version = "0.5.3", features = ["password-hash"] }
+aes-gcm = "^0.10"
 rand = "^0.9"
 base64 = "^0.22"
 ed25519-dalek = "^2"

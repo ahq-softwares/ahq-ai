@@ -1,6 +1,6 @@
 use async_trait::async_trait;
+use log::*;
 use std::{path::PathBuf, str::FromStr, time::Duration};
-
 use tikv_client::{BoundRange, Config, Error, Key, RawClient, TransactionClient};
 use tokio::time::sleep;
 
@@ -21,7 +21,7 @@ pub struct TikvClient {
 impl TikvClient {
   // This must crash the server on error
   pub async fn new() -> Self {
-    println!("Connecting to database");
+    info!("Connecting to TiKV Database");
 
     let mut config = Config::default();
 

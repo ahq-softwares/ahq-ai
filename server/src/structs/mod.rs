@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string_pretty};
@@ -14,11 +14,9 @@ pub struct Config {
   #[serde(default = "def_bind")]
   pub binds: Vec<(String, u16)>,
   pub admin_pass_hash: Option<String>,
-  pub ollama: OllamaConfiguration,
+  pub llama: LlamaConfiguration,
   pub authentication: Authentication,
 }
-
-pub static BCRYPT_COST: u32 = 14;
 
 fn def_bind() -> Vec<(String, u16)> {
   vec![
@@ -28,19 +26,79 @@ fn def_bind() -> Vec<(String, u16)> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct OllamaConfiguration {
-  pub host: Box<str>,
-  pub port: u16,
-  pub msgs: usize,
-  pub cvmodels: HashSet<Box<str>>,
-  pub txtmodels: HashSet<Box<str>>,
+pub struct LlamaConfiguration {
+  pub models: HashMap<Box<str>, LlamaServer>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LlamaServer {
+  pub name: Box<str>,
+  pub url: Box<str>,
+  pub capabilities: Capabilities,
+  pub apikey: Option<Box<str>>,
+}
+
+pub enum ModelFlag {
+  Image,
+  Audio,
+  Files,
+}
+
+impl ModelFlag {
+  pub fn into_int(self) -> u16 {
+    match self {
+      Self::Image => 1,
+      Self::Audio => 2,
+      Self::Files => 4,
+    }
+  }
+}
+
+#[repr(transparent)]
+#[derive(Debug, Clone, Default)]
+pub struct Capabilities(pub u16);
+
+impl Serialize for Capabilities {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: serde::Serializer,
+  {
+    self.0.serialize(serializer)
+  }
+}
+
+impl<'de> Deserialize<'de> for Capabilities {
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: serde::Deserializer<'de>,
+  {
+    Ok(Self(u16::deserialize(deserializer)?))
+  }
+}
+
+impl Capabilities {
+  pub fn add(&mut self, flag: ModelFlag) {
+    self.0 |= flag.into_int();
+  }
+
+  pub fn remove(&mut self, flag: ModelFlag) {
+    self.0 &= !flag.into_int();
+  }
+
+  pub fn has(&mut self, flag: ModelFlag) -> bool {
+    (self.0 & flag.into_int()) > 0
+  }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind")]
 pub enum Authentication {
   OpenToAll,
-  Account { registration_allowed: bool },
+  Account { 
+    registration_allowed: bool,
+    max_memory: u32,
+    time_cost: u32
+  },
 }
 
 impl Config {
@@ -66,8 +124,8 @@ impl Default for Config {
     Self {
       binds: def_bind(),
       admin_pass_hash: None,
-      ollama: OllamaConfiguration::default(),
-      authentication: Authentication::OpenToAll,
+      llama: LlamaConfiguration::default(),
+      authentication: Authentication::Account { registration_allowed: true, max_memory: 64, time_cost: 5 },
     }
   }
 }

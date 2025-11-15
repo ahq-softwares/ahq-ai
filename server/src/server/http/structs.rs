@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::{collections::HashMap, sync::LazyLock};
 
 use serde::Serialize;
 
@@ -21,8 +21,7 @@ pub struct RootResponse {
   version: &'static str,
   auth: ShowedAuth,
   can_register: bool,
-  vision_models: Vec<&'static str>,
-  text_models: Vec<&'static str>,
+  models: HashMap<Box<str>, u16>,
 }
 
 impl RootResponse {
@@ -31,8 +30,7 @@ impl RootResponse {
       version: env!("CARGO_PKG_VERSION"),
       auth: ShowedAuth::OpenToAll,
       can_register: false,
-      text_models: vec![],
-      vision_models: vec![],
+      models: HashMap::new(),
     };
 
     match CONFIG.authentication {
@@ -48,15 +46,8 @@ impl RootResponse {
       }
     }
 
-    out.text_models.reserve(CONFIG.ollama.txtmodels.len());
-    out.vision_models.reserve(CONFIG.ollama.cvmodels.len());
-
-    CONFIG.ollama.cvmodels.iter().for_each(|x| {
-      out.vision_models.push(x as &str);
-    });
-
-    CONFIG.ollama.txtmodels.iter().for_each(|x| {
-      out.text_models.push(x as &str);
+    CONFIG.llama.models.iter().for_each(|(key, value)| {
+      _ = out.models.insert(key.to_owned(), value.capabilities.0);
     });
 
     out

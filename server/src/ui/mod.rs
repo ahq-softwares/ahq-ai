@@ -17,11 +17,14 @@ use cursive_tabs::TabPanel;
 use serde_json::to_string_pretty;
 use tokio::runtime::{Builder, Runtime};
 
-use crate::structs::{Authentication, BCRYPT_COST, Config};
+use crate::{
+  auth::argon::server::hash_server_pass,
+  structs::{Authentication, Config},
+};
 
 mod auth;
 mod bind;
-mod ollama;
+mod llama;
 
 pub(crate) mod lazy;
 
@@ -31,8 +34,6 @@ pub static ASYNC: LazyLock<Runtime> = LazyLock::new(|| {
     .build()
     .expect("Unable to build async runtime")
 });
-
-use bcrypt::hash;
 
 fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
   l.add_child(
@@ -85,7 +86,8 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
               .child(EditView::new().secret().on_submit(|x, txt| {
                 let c_: &mut Ptr<Config> = x.user_data().unwrap();
 
-                c_.admin_pass_hash = Some(hash(txt, BCRYPT_COST).expect("Unknown error"));
+                c_.admin_pass_hash =
+                  Some(hash_server_pass(txt, &mut rand::rng()).expect("Unknown error"));
 
                 x.pop_layer();
               }))
@@ -131,6 +133,8 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
                       0 => Authentication::OpenToAll,
                       2 => Authentication::Account {
                         registration_allowed: true,
+                        max_memory: 64,
+                        time_cost: 5
                       },
                       _ => unreachable!(),
                     };
@@ -239,7 +243,7 @@ pub fn ui() {
       .with_name("䷸ General"),
   );
 
-  tabs.add_tab(ollama::ollama_page(c_.clone()));
+  tabs.add_tab(llama::llama_page(c_.clone()));
 
   tabs.add_tab(auth::auth_page(&mut siv));
 

@@ -6,13 +6,12 @@ use crate::{
   },
   server::{CONFIG, DBCONF},
   structs::{
-    Authentication, BCRYPT_COST,
+    Authentication,
     db::{AuthDbConfig, CacheConfig},
-    error::Returns,
+    error::{Returns, ServerError},
   },
 };
 use base64::{Engine as _, engine::general_purpose};
-use bcrypt::hash;
 use rand::{Rng, seq::IndexedRandom};
 use std::{
   sync::LazyLock,
@@ -20,6 +19,7 @@ use std::{
 };
 use tokio::task::spawn_blocking;
 
+pub mod argon;
 pub mod hash;
 
 pub mod authserver;
@@ -113,7 +113,7 @@ impl AuthSessionManager {
   }
 
   pub async fn add_token(&self) -> Returns<AccountCreateOutcome> {
-    let (key, (user, hash)) = gen_auth_token()?;
+    let (key, (user, hash)) = gen_auth_token(self.agent).await?;
 
     self.accounts.update(user, hash).await?;
 
@@ -218,7 +218,15 @@ pub const VALUES: [char; 64] = [
 
 pub type Hashed = String;
 
-pub fn gen_auth_token() -> Returns<(String, (String, Hashed))> {
+pub fn gen_uid() -> Returns<String> {
+  let mut rng = rand::rng();
+
+  let token = VALUES.choose_multiple(&mut rng, 32).collect::<String>();
+
+  Ok(token)
+}
+
+pub async fn gen_auth_token(cpufarm: &HashingAgent) -> Returns<(String, (String, Hashed))> {
   let mut rng = rand::rng();
 
   let token = VALUES.choose_multiple(&mut rng, 128).collect::<String>();
@@ -227,7 +235,10 @@ pub fn gen_auth_token() -> Returns<(String, (String, Hashed))> {
 
   token_key.extend(VALUES.choose_multiple(&mut rng, TOKEN_ID_LENGTH));
 
-  let hashed = hash(&token, BCRYPT_COST)?;
+  let hashed = cpufarm
+    .gen_hash(&token)
+    .await
+    .map_or_else(|| Err(ServerError::StringConvertErr), |x| Ok(x))?;
 
   let token_to_output = format!("{token_key}.{token}");
 

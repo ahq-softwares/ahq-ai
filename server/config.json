@@ -2,27 +2,19 @@
   "binds": [
     [
       "0.0.0.0",
-      3124
+      3000
     ],
     [
       "localhost",
-      3124
+      3000
     ]
   ],
-  "admin_pass_hash": "$2b$14$1tCcHxc7haJJDGi2IObejOC3CUxf5Pk/A8rPlH8DjzOD1h.HF.4Hi",
-  "ollama": {
-    "host": "http://127.0.0.1",
-    "port": 11434,
-    "msgs": 80,
-    "cvmodels": [
-      "llava:7b"
-    ],
-    "txtmodels": [
-      "llama3:7b"
-    ]
+  "admin_pass_hash": null,
+  "llama": {
+    "models": {
+    }
   },
   "authentication": {
-    "kind": "Account",
-    "registration_allowed": true
+    "kind": "OpenToAll"
   }
 }

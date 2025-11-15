@@ -5,12 +5,12 @@ use std::{
 };
 
 use crate::{
-  auth::AuthSessionManager,
+  auth::{AuthSessionManager, argon::server::verify_server_pass},
   structs::{Authentication, Config, db::DatabaseConfig},
 };
 use actix_web::{App, HttpServer, web};
-use bcrypt::verify;
 use chalk_rs::Chalk;
+use log::*;
 use secrecy::SecretString;
 use serde_json::from_str;
 
@@ -31,7 +31,7 @@ pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
 
 pub static DBCONF: LazyLock<DatabaseConfig> = LazyLock::new(|| DatabaseConfig::get());
 
-pub static HISTORY_LENGTH: LazyLock<usize> = LazyLock::new(|| CONFIG.ollama.msgs.saturating_mul(2));
+// pub static HISTORY_LENGTH: LazyLock<usize> = LazyLock::new(|| CONFIG.ollama.msgs.saturating_mul(2));
 
 pub static AUTH: OnceLock<AuthSessionManager> = OnceLock::new();
 
@@ -106,30 +106,23 @@ pub async fn main() -> std::io::Result<()> {
     server = server.bind((host as &str, *port))?
   }
 
-  println!("----------------");
-  chalk.blue().println(&"Server is starting!");
-  println!("----------------");
-  println!();
+  info!("Server is starting");
 
   let out = server.run().await;
 
   if let Err(e) = &out {
-    println!("----------------");
+    error!("Server exited in an error state.");
+    error!("{e}");
+  }
+
+  warn!("Ctrl+C detected (most probably). Starting shutdown procedure. This might take a while.");
+  info!(
+    "{}",
     chalk
       .red()
       .bold()
-      .println(&"Server Exited in an error state");
-    println!("{e}");
-  }
-
-  println!("----------------");
-  chalk.reset_style().blue().bold().println(
-    &"Starting shutdown procedure. Saving server state to disk... This might take a while",
+      .string(&"Please DO NOT use Ctrl+C to terminate. It will lead to data corruption!")
   );
-  chalk
-    .red()
-    .bold()
-    .println(&"Please DO NOT use Ctrl+C to terminate. It will lead to data corruption!");
 
   chalk.reset_style().blue().bold().println(
     &"Server state has been successfully set! Closing server. Session tokens will be discarded.",
@@ -149,27 +142,27 @@ fn request_admin_passwd() -> bool {
     if let Ok(x) = env::var("AHQAI_ADMIN_PASSWORD") {
       passwd = x;
     } else {
-      println!("----------------");
-      println!("THE GIVEN SERVER IS PROTECTED BY SERVER ADMIN PASSWORD");
-      println!("BUT THE `AHQAI_ADMIN_PASSWORD` VARIABLE WAS NOT FOUND");
-      println!("IN THE CURRENT SERVER ENVIRONMENT. REQUESTING MANUAL ENTRY");
-      println!("----------------");
-      println!();
+      warn!("----------------");
+      warn!("THE GIVEN SERVER IS PROTECTED BY SERVER ADMIN PASSWORD");
+      warn!("BUT THE `AHQAI_ADMIN_PASSWORD` VARIABLE WAS NOT FOUND");
+      warn!("IN THE CURRENT SERVER ENVIRONMENT. REQUESTING MANUAL ENTRY");
+      warn!("----------------");
+      warn!("");
 
       passwd = rpassword::prompt_password("Enter your administrator password : ")
         .expect("Unable to read your password");
     }
 
-    if !verify(&passwd, hash).unwrap_or(false) {
+    if !verify_server_pass(&passwd, hash).unwrap_or(false) {
       panic!("Invalid Password was provided")
     }
 
-    println!();
-    println!("----------------");
-    println!("SERVER ADMIN PASSWORD AUTH SUCCESSFUL");
-    println!("SERVER WILL START UP NOW");
-    println!("----------------");
-    println!();
+    warn!("");
+    warn!("----------------");
+    warn!("SERVER ADMIN PASSWORD AUTH SUCCESSFUL");
+    warn!("SERVER WILL START UP NOW");
+    warn!("----------------");
+    warn!("");
 
     REAL_ADMIN_PASSWORD
       .set(SecretString::from(passwd))

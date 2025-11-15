@@ -4,7 +4,7 @@ use mongodb::error::Error as MongoDBError;
 use redis::RedisError;
 use thiserror::Error;
 
-use bcrypt::BcryptError;
+use argon2::password_hash::Error as ArgonErr;
 use serde_json::Error as SerdeError;
 use std::io::Error as StdError;
 use tikv_client::Error as TikvError;
@@ -30,8 +30,8 @@ pub enum ServerError {
   StringConvertErr,
   #[error("Tried to retry many times but failed")]
   RetryFailed,
-  #[error(transparent)]
-  BcryptErr(#[from] BcryptError),
+  #[error("Argon Hashing Error")]
+  ArgonErr(ArgonErr),
 }
 
 impl actix_web::error::ResponseError for ServerError {

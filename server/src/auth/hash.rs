@@ -1,11 +1,10 @@
-use bcrypt::{hash, verify};
 use crossbeam_channel::{Sender, bounded};
 use ed25519_dalek::{Signature, SigningKey, ed25519::signature::SignerMut};
 use std::thread;
 use std::thread::available_parallelism;
 use tokio::sync::oneshot::{Sender as OneshotSender, channel};
 
-use crate::{auth::INTEGRITY_KEY, structs::BCRYPT_COST};
+use crate::auth::{INTEGRITY_KEY, argon};
 
 pub struct HashingAgent(Sender<HashResp>);
 
@@ -38,13 +37,15 @@ impl HashingAgent {
       thread::spawn(move || {
         let mut signer = SigningKey::from_keypair_bytes(INTEGRITY_KEY).unwrap();
 
+        let mut rng = rand::rng();
+
         while let Ok(x) = rxc.recv() {
           match x {
             HashResp::GenHash { pass, tx } => {
-              _ = tx.send(hash(&pass, BCRYPT_COST).ok());
+              _ = tx.send(argon::hash_pass(&pass, &mut rng).ok());
             }
             HashResp::CheckHash { pass, hash, tx } => {
-              _ = tx.send(verify(&pass, &hash).ok());
+              _ = tx.send(argon::verify(&pass, &hash).ok());
             }
             HashResp::Challenge { bytes, tx } => {
               let sign = signer.try_sign(&bytes).ok();
