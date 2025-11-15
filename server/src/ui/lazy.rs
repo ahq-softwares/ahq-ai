@@ -26,7 +26,7 @@ impl<V: View, F: Fn(&mut Cursive) + 'static> OnAuthStateUpdate<V, F> {
           Authentication::OpenToAll => Authentication::Account {
             registration_allowed: false,
             max_memory: 64,
-            time_cost: 5
+            time_cost: 5,
           },
         }
       })),

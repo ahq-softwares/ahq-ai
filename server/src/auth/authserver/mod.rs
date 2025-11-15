@@ -3,6 +3,7 @@ use async_trait::async_trait;
 
 pub mod mongodb;
 pub mod tikv;
+pub mod moka;
 
 #[async_trait]
 pub(crate) trait AuthServer {

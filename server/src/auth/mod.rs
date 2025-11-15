@@ -1,6 +1,6 @@
 use crate::{
   auth::{
-    authserver::{AuthServer, mongodb::MongodbClient, tikv::TikvClient},
+    authserver::{AuthServer, moka::MokaTestingDB, mongodb::MongodbClient, tikv::TikvClient},
     cache::{AsyncCaching, moka::MokaSessions, redis::RedisSessions},
     hash::HashingAgent,
   },
@@ -12,6 +12,7 @@ use crate::{
   },
 };
 use base64::{Engine as _, engine::general_purpose};
+use log::warn;
 use rand::{Rng, seq::IndexedRandom};
 use std::{
   sync::LazyLock,
@@ -62,6 +63,12 @@ impl AuthSessionManager {
     let sessions: Box<dyn AsyncCaching + Send + Sync>;
 
     match &DBCONF.authdb {
+      AuthDbConfig::Moka {  } => {
+        warn!(
+          "CRITICAL WARNING! YOU ARE USING MOKA DB WHICH NEITHER HAS PERSISTENCE NOR IS RECOMMENDED FOR PRODUCTION IN ANY MEANS. PLEASE SHIFT TO A MORE ROBUST DB IMPLEMENTATION LIKE MONGODB OR TIKV FOR EVEN A HOBBY SERVER."
+        );
+        accounts = Box::new(MokaTestingDB::new());
+      }
       AuthDbConfig::Mongodb { .. } => accounts = Box::new(MongodbClient::new().await),
       AuthDbConfig::Tikv { .. } => accounts = Box::new(TikvClient::new().await),
     };

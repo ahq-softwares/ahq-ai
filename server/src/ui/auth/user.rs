@@ -2,7 +2,7 @@ use cursive::{
   align::Align,
   theme::{Effect, Style},
   view::{Nameable, Resizable},
-  views::{Button, Dialog, DummyView, LinearLayout, SelectView, TextView},
+  views::{Button, Dialog, DummyView, EditView, LinearLayout, SelectView, TextView},
 };
 
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
   ui::Ptr,
 };
 
-pub fn render(l: &mut LinearLayout, can_register: bool) {
+pub fn render(l: &mut LinearLayout, can_register: bool, memory: u32, time: u32) {
   l.add_child(
     LinearLayout::horizontal()
       .child(TextView::new("⚒ Authentication Type").full_width())
@@ -52,6 +52,102 @@ pub fn render(l: &mut LinearLayout, can_register: bool) {
         })
         .with_name("user_reg_allowed"),
       ),
+  );
+
+  l.add_child(DummyView::new().fixed_height(2));
+
+  l.add_child(
+    TextView::new("⚒ Argon2")
+      .align(Align::center())
+      .style(Style::merge(&[
+        Effect::Dim.into(),
+        Effect::Underline.into(),
+      ])),
+  );
+
+  l.add_child(
+    LinearLayout::horizontal()
+      .child(TextView::new("⚒ Argon2 Memory Cost").full_width())
+      .child(
+        Button::new_raw(format!("[{memory} MiB]"), |x| {
+          x.add_layer(
+            Dialog::around(
+              EditView::new()
+                .on_edit(|x, val, _| {
+                  let state: &mut Ptr<Config> = x.user_data().unwrap();
+
+                  if let Ok(num) = val.parse::<u32>() {
+                    if num > 0 {
+                      let Authentication::Account { max_memory, .. } = &mut state.authentication
+                      else {
+                        unreachable!()
+                      };
+                      *max_memory = num;
+
+                      x.call_on_name("ram_usage", move |x: &mut Button| {
+                        x.set_label_raw(format!("[{num} MiB]"));
+                      });
+                    }
+                  }
+                })
+                .on_submit(|x, _| {
+                  x.pop_layer();
+                }),
+            )
+            .dismiss_button("Done")
+            .title("Memory Cost"),
+          );
+        })
+        .with_name("ram_usage"),
+      ),
+  );
+
+  l.add_child(
+    LinearLayout::horizontal()
+      .child(TextView::new("⚒ Argon2 Time Cost (Total Rounds)").full_width())
+      .child(
+        Button::new_raw(format!("<{time}>"), |x| {
+          x.add_layer(
+            Dialog::around(
+              EditView::new()
+                .on_edit(|x, val, _| {
+                  let state: &mut Ptr<Config> = x.user_data().unwrap();
+
+                  if let Ok(num) = val.parse::<u32>() {
+                    if num > 0 {
+                      let Authentication::Account { time_cost, .. } = &mut state.authentication
+                      else {
+                        unreachable!()
+                      };
+                      *time_cost = num;
+
+                      x.call_on_name("time", move |x: &mut Button| {
+                        x.set_label_raw(format!("<{num}>"));
+                      });
+                    }
+                  }
+                })
+                .on_submit(|x, _| {
+                  x.pop_layer();
+                }),
+            )
+            .dismiss_button("Done")
+            .title("Time Cost"),
+          );
+        })
+        .with_name("time"),
+      ),
+  );
+
+  l.add_child(DummyView::new().fixed_height(2));
+
+  l.add_child(
+    TextView::new("Miscellaneous")
+      .align(Align::center())
+      .style(Style::merge(&[
+        Effect::Dim.into(),
+        Effect::Underline.into(),
+      ])),
   );
 
   l.add_child(

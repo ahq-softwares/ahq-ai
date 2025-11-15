@@ -1,5 +1,6 @@
 use crossbeam_channel::{Sender, bounded};
 use ed25519_dalek::{Signature, SigningKey, ed25519::signature::SignerMut};
+use rand::rngs::OsRng;
 use std::thread;
 use std::thread::available_parallelism;
 use tokio::sync::oneshot::{Sender as OneshotSender, channel};
@@ -37,7 +38,7 @@ impl HashingAgent {
       thread::spawn(move || {
         let mut signer = SigningKey::from_keypair_bytes(INTEGRITY_KEY).unwrap();
 
-        let mut rng = rand::rng();
+        let mut rng = OsRng::default();
 
         while let Ok(x) = rxc.recv() {
           match x {

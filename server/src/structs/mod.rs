@@ -4,18 +4,22 @@ use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string_pretty};
 use tokio::fs;
 
-use crate::structs::error::Returns;
+use crate::structs::{db::DatabaseConfig, error::Returns};
 
 pub mod db;
 pub mod error;
 
+const VERSION: u16 = 1;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
+  pub version: u16,
   #[serde(default = "def_bind")]
   pub binds: Vec<(String, u16)>,
   pub admin_pass_hash: Option<String>,
   pub llama: LlamaConfiguration,
   pub authentication: Authentication,
+  pub database: DatabaseConfig
 }
 
 fn def_bind() -> Vec<(String, u16)> {
@@ -81,9 +85,9 @@ impl Capabilities {
     self.0 |= flag.into_int();
   }
 
-  pub fn remove(&mut self, flag: ModelFlag) {
-    self.0 &= !flag.into_int();
-  }
+  // pub fn remove(&mut self, flag: ModelFlag) {
+  //   self.0 &= !flag.into_int();
+  // }
 
   pub fn has(&mut self, flag: ModelFlag) -> bool {
     (self.0 & flag.into_int()) > 0
@@ -94,10 +98,10 @@ impl Capabilities {
 #[serde(tag = "kind")]
 pub enum Authentication {
   OpenToAll,
-  Account { 
+  Account {
     registration_allowed: bool,
     max_memory: u32,
-    time_cost: u32
+    time_cost: u32,
   },
 }
 
@@ -105,7 +109,18 @@ impl Config {
   pub async fn new() -> Returns<Self> {
     let val = fs::read_to_string("./config.json").await?;
 
-    Ok(from_str::<Self>(&val)?)
+    let out = from_str::<Self>(&val)?;
+    
+    if out.version != VERSION {
+      panic!(
+        "❌ Database Config version mismatch:
+         Expected version {VERSION}, found {}.
+         Please migrate your configuration file to match the current schema.",
+        out.version
+      );
+    }
+
+    Ok(out)
   }
 
   pub async fn new_or_default() -> Self {
@@ -122,10 +137,16 @@ impl Config {
 impl Default for Config {
   fn default() -> Self {
     Self {
+      version: VERSION,
+      database: DatabaseConfig::default(),
       binds: def_bind(),
       admin_pass_hash: None,
       llama: LlamaConfiguration::default(),
-      authentication: Authentication::Account { registration_allowed: true, max_memory: 64, time_cost: 5 },
+      authentication: Authentication::Account {
+        registration_allowed: true,
+        max_memory: 64,
+        time_cost: 5,
+      },
     }
   }
 }

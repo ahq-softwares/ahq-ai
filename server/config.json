@@ -1,4 +1,5 @@
 {
+  "version": 1,
   "binds": [
     [
       "0.0.0.0",
@@ -9,12 +10,23 @@
       3000
     ]
   ],
-  "admin_pass_hash": null,
+  "admin_pass_hash": "$argon2id$v=19$m=65536,t=2,p=1$fYEXLqB6cH9zxcOxgLk+Z0tAkwdVtRVe95DlnZeqWVM$qMPV3gKCP3NLSJWXGhagH7uGIGhpTAvCVH79v/c67lo",
   "llama": {
-    "models": {
-    }
+    "models": {}
   },
   "authentication": {
-    "kind": "OpenToAll"
+    "kind": "Account",
+    "registration_allowed": true,
+    "max_memory": 64,
+    "time_cost": 5
+  },
+  "database": {
+    "authdb": {
+      "db": "mongodb",
+      "url": ""
+    },
+    "cache": {
+      "db": "moka"
+    }
   }
 }

@@ -3,11 +3,8 @@ use std::fs;
 use serde::{Deserialize, Serialize};
 use serde_json::from_str;
 
-const VERSION: u16 = 1;
-
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DatabaseConfig {
-  pub version: u16,
   pub authdb: AuthDbConfig,
   pub cache: CacheConfig,
 }
@@ -15,6 +12,8 @@ pub struct DatabaseConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "db")]
 pub enum AuthDbConfig {
+  #[serde(rename = "moka")]
+  Moka {},
   #[serde(rename = "mongodb")]
   Mongodb { url: Box<str> },
   #[serde(rename = "tikv")]
@@ -62,15 +61,6 @@ impl DatabaseConfig {
 
     let out: Self =
       from_str(&data).expect("Unable to parse your JSON Database Config. Make sure it is correct");
-
-    if out.version != VERSION {
-      panic!(
-        "❌ Database Config version mismatch:
-         Expected version {VERSION}, found {}.
-         Please migrate your configuration file to match the current schema.",
-        out.version
-      );
-    }
 
     out
   }

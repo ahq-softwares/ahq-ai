@@ -1,12 +1,19 @@
-use std::{fs, sync::LazyLock};
+use std::sync::LazyLock;
 
+use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
 use argon2::{
-  Algorithm, Argon2, Params, PasswordHash, PasswordHasher, RECOMMENDED_SALT_LEN, Version,
+  Algorithm, Argon2, Params, PasswordHash, PasswordHasher, Version,
   password_hash::SaltString,
 };
-use rand::{RngCore, rng, rngs::ThreadRng};
+use base64::{Engine, prelude::BASE64_STANDARD};
+use rand::{TryRngCore, rngs::OsRng};
 
-use crate::{server::CONFIG, structs::{Authentication, error::{Returns, ServerError}}};
+use crate::{
+  server::CONFIG,
+  structs::{
+    Authentication, Config, error::{Returns, ServerError}
+  },
+};
 
 const KEY_LEN: usize = 32;
 
@@ -17,7 +24,12 @@ static KEYARGON: LazyLock<Argon2> = LazyLock::new(|| {
 });
 
 static HASHARGON: LazyLock<Argon2> = LazyLock::new(|| {
-  let Authentication::Account { max_memory, time_cost, .. } = CONFIG.authentication.clone() else {
+  let Authentication::Account {
+    max_memory,
+    time_cost,
+    ..
+  } = CONFIG.authentication.clone()
+  else {
     unreachable!()
   };
 
@@ -26,26 +38,12 @@ static HASHARGON: LazyLock<Argon2> = LazyLock::new(|| {
   Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
 });
 
-static KEYARGONSALT: LazyLock<[u8; 32]> = LazyLock::new(|| {
-  if let Ok(x) = fs::read("./saltdata") {
-    if let Ok(salt) = x.try_into() {
-      return salt;
-    }
-  }
+static SALT_LEN: usize = 32;
 
-  let mut salt_bytes = [0u8; RECOMMENDED_SALT_LEN * 2];
+pub fn hash_pass(pwd: &str, rng: &mut OsRng) -> Returns<String> {
+  let mut salt_bytes = [0u8; SALT_LEN * 2];
 
-  rng().fill_bytes(&mut salt_bytes);
-
-  _ = fs::write("./saltdata", &salt_bytes);
-
-  salt_bytes
-});
-
-pub fn hash_pass(pwd: &str, rng: &mut ThreadRng) -> Returns<String> {
-  let mut salt_bytes = [0u8; RECOMMENDED_SALT_LEN * 2];
-
-  rng.fill_bytes(&mut salt_bytes);
+  rng.try_fill_bytes(&mut salt_bytes)?;
 
   let data: String = HASHARGON
     .hash_password(
@@ -69,16 +67,16 @@ pub fn verify(pwd: &str, hash: &str) -> Returns<bool> {
 }
 
 pub mod server {
+  use crate::structs::error::ServerError;
   use crate::{auth::argon::KEYARGON, structs::error::Returns};
   use argon2::{PasswordHash, PasswordHasher, RECOMMENDED_SALT_LEN, password_hash::SaltString};
-  use rand::{RngCore, rngs::ThreadRng};
-  use crate::structs::error::ServerError;
+  use rand::{TryRngCore, rngs::OsRng};
 
   /// Use only in the Terminal User Interface
-  pub fn hash_server_pass(pwd: &str, rng: &mut ThreadRng) -> Returns<String> {
+  pub fn hash_server_pass(pwd: &str) -> Returns<String> {
     let mut salt_bytes = [0u8; RECOMMENDED_SALT_LEN * 2];
 
-    rng.fill_bytes(&mut salt_bytes);
+    OsRng::default().try_fill_bytes(&mut salt_bytes)?;
 
     let data: String = KEYARGON
       .hash_password(
@@ -103,12 +101,91 @@ pub mod server {
   }
 }
 
-pub fn get_privatekey(pwd: &str) -> [u8; KEY_LEN] {
-  let mut key_bytes = [0u8; KEY_LEN];
+const NONCE_LEN: usize = 12;
 
-  KEYARGON
-    .hash_password_into(pwd.as_bytes(), KEYARGONSALT.as_slice(), &mut key_bytes)
-    .unwrap();
+pub fn encrypt_with_key(pwd: &str, data: &str) -> String {
+  let salt = {
+    let mut salt_bytes = [0u8; SALT_LEN];
 
-  key_bytes
+    OsRng::default().try_fill_bytes(&mut salt_bytes).unwrap();
+
+    salt_bytes
+  };
+
+  let key = {
+    let mut key_bytes = [0u8; KEY_LEN];
+
+    KEYARGON
+      .hash_password_into(pwd.as_bytes(), salt.as_slice(), &mut key_bytes)
+      .unwrap();
+
+    key_bytes
+  };
+
+  let aes = {
+    Aes256Gcm::new_from_slice(&key).unwrap()
+  };
+
+  let nonce_slice = {
+    let mut nonce_slice = [0u8; NONCE_LEN];
+
+    OsRng::default().try_fill_bytes(&mut nonce_slice).unwrap();
+
+    nonce_slice
+  };
+
+  let nonce = Nonce::from_slice(&nonce_slice);
+
+  let ciphertext_with_tag = aes.encrypt(nonce, data.as_bytes()).unwrap();
+
+  let mut out = Vec::from(salt);
+  out.extend(nonce_slice);
+  out.extend(ciphertext_with_tag.into_iter());
+
+  BASE64_STANDARD.encode(out)
+}
+
+pub fn decrypt_with_key(pwd: &str, data: &str) -> String {
+  let raw = BASE64_STANDARD.decode(data).unwrap();
+
+  let salt_slice = &raw[0..SALT_LEN];
+  
+  let nonce_slice = &raw[SALT_LEN..(SALT_LEN+NONCE_LEN)];
+  let nonce = Nonce::from_slice(nonce_slice);
+
+  let cipher = &raw[(SALT_LEN+NONCE_LEN)..];
+
+  let key = {
+    let mut key_bytes = [0u8; KEY_LEN];
+
+    KEYARGON
+      .hash_password_into(pwd.as_bytes(), salt_slice, &mut key_bytes)
+      .unwrap();
+
+    key_bytes
+  };
+
+  let aes = {
+    Aes256Gcm::new_from_slice(&key).unwrap()
+  };
+
+  let ciphertext_with_tag = aes.decrypt(nonce, cipher).unwrap();
+
+  String::from_utf8(ciphertext_with_tag).unwrap()
+}
+
+pub fn migrate_key(old_pass: &str, new_pass: &str, encrypted: &str) -> String {
+  let data = decrypt_with_key(old_pass, encrypted);
+
+  encrypt_with_key(new_pass, &data)
+}
+
+pub fn migrate_config(old_pass: &str, new_pass: &str, config: &mut Config) {
+  {
+    config.llama.models.iter_mut().for_each(|(_, v)| {
+      if let Some(api) = &mut v.apikey {
+        *api = migrate_key(old_pass, new_pass, &api).into_boxed_str();
+      }
+    });
+  }
 }

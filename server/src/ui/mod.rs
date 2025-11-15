@@ -18,13 +18,14 @@ use serde_json::to_string_pretty;
 use tokio::runtime::{Builder, Runtime};
 
 use crate::{
-  auth::argon::server::hash_server_pass,
+  auth::argon::{migrate_config, server::{hash_server_pass, verify_server_pass}},
   structs::{Authentication, Config},
 };
 
 mod auth;
 mod bind;
 mod llama;
+mod dbconf;
 
 pub(crate) mod lazy;
 
@@ -79,32 +80,62 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
   l.add_child(
     LinearLayout::horizontal()
       .child(TextView::new("⚒ Administrator Password").full_width())
-      .child(Button::new_raw("Set/Update ↗", move |x| {
+      .child(Button::new_raw("Update ↗", move |x| {
         x.add_layer(
           Dialog::around(
             LinearLayout::vertical()
-              .child(EditView::new().secret().on_submit(|x, txt| {
-                let c_: &mut Ptr<Config> = x.user_data().unwrap();
-
-                c_.admin_pass_hash =
-                  Some(hash_server_pass(txt, &mut rand::rng()).expect("Unknown error"));
-
-                x.pop_layer();
-              }))
+              .child(TextView::new("Old Password"))
+              .child(EditView::new().secret().with_name("old_pwd"))
+              .child(DummyView::new().fixed_height(1))
+              .child(TextView::new("New Password"))
+              .child(EditView::new().secret().with_name("new_pwd"))
               .child(TextView::new("Press Enter key to submit"))
               .child(TextView::new(
-                "The UI might hand for a moment due to hashing algorithm",
+                "The UI might hang for a moment due to hashing algorithm and secret migration",
               )),
           )
-          .title("New Administrator Password")
+          .title("Change Administrator Password")
+          .button("Change", |x| {
+            let old_pass = x
+              .call_on_name("old_pwd", |x: &mut EditView| x.get_content())
+              .unwrap();
+
+            let new_pass = x
+              .call_on_name("new_pwd", |x: &mut EditView| x.get_content())
+              .unwrap();
+
+            if old_pass.len().min(new_pass.len()) <= 8 {
+              x.add_layer(Dialog::around(TextView::new("Password must have more than 8 characters")).dismiss_button("Ok"));
+              return;
+            }
+
+            let mut conf: Ptr<Config> = x.user_data::<Ptr<Config>>().unwrap().clone();
+
+            if !verify_server_pass(old_pass.as_str(), conf.admin_pass_hash.as_ref().unwrap()).unwrap_or_default() {
+              x.add_layer(Dialog::around(TextView::new("Old password did not match")).dismiss_button("Ok"));
+              return;
+            }
+
+            conf.admin_pass_hash = Some(hash_server_pass(&new_pass).unwrap());
+
+            migrate_config(&old_pass, &new_pass, conf.deref_mut());
+          })
           .dismiss_button("Cancel"),
         );
       }))
       .child(DummyView::new().fixed_width(2))
       .child(Button::new_raw("Remove ↗", move |x| {
-        let c_: &mut Ptr<Config> = x.user_data().unwrap();
+        x.add_layer(Dialog::around(
+          TextView::new("This will invalidate the configuration and you will lose all of your encrypted secrets!")
+        )
+        .title("Danger")
+        .dismiss_button("Cancel")
+        .button("OK, I understand the risks", |x| {
+          let c_: &mut Ptr<Config> = x.user_data().unwrap();
 
-        c_.admin_pass_hash = None;
+          c_.admin_pass_hash = None;
+          x.pop_layer();
+        }));
       })),
   );
 
@@ -134,7 +165,7 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
                       2 => Authentication::Account {
                         registration_allowed: true,
                         max_memory: 64,
-                        time_cost: 5
+                        time_cost: 5,
                       },
                       _ => unreachable!(),
                     };
@@ -247,6 +278,8 @@ pub fn ui() {
 
   tabs.add_tab(auth::auth_page(&mut siv));
 
+  tabs.add_tab(dbconf::db_page(c_.clone()));
+
   tabs.add_tab(
     ScrollView::new(
       LinearLayout::vertical()
@@ -315,6 +348,33 @@ pub fn ui() {
       ))
       .title("Important")
       .dismiss_button("Ok"),
+    );
+  }
+
+  if let None = &config.admin_pass_hash {
+    siv.add_layer(
+      Dialog::around(
+        LinearLayout::vertical()
+          .child(TextView::new("Set a server administrator password"))
+          .child(EditView::new().secret().with_name("pass")),
+      )
+      .button("Set", |x| {
+        let pass = x
+          .call_on_name("pass", |x: &mut EditView| x.get_content())
+          .unwrap();
+
+        if pass.len() > 8 {
+          let c_: &mut Ptr<Config> = x.user_data().unwrap();
+
+          c_.admin_pass_hash = Some(hash_server_pass(pass.as_str()).unwrap());
+
+          x.pop_layer();
+        } else {
+          x.add_layer(
+            Dialog::around(TextView::new("Must be more than 8 characters")).dismiss_button("Ok"),
+          );
+        }
+      }),
     );
   }
 

@@ -1,5 +1,8 @@
 use crate::{
-  auth::gen_uid,
+  auth::{
+    argon::{encrypt_with_key, server::verify_server_pass},
+    gen_uid,
+  },
   structs::{Capabilities, Config, LlamaServer, ModelFlag},
   ui::Ptr,
 };
@@ -42,7 +45,7 @@ pub fn new_server(conf: Ptr<Config>) -> ResizedView<ResizedView<Dialog>> {
         x.add_child(DummyView::new().fixed_height(1));
 
         x.add_child(TextView::new("Server Admin Password (for verification)"));
-        x.add_child(EditView::new().with_name("server_admin_key"));
+        x.add_child(EditView::new().secret().with_name("server_admin_key"));
 
         x.add_child(DummyView::new().fixed_height(1));
 
@@ -75,6 +78,18 @@ pub fn new_server(conf: Ptr<Config>) -> ResizedView<ResizedView<Dialog>> {
         .call_on_name("model_name", |x: &mut EditView| x.get_content())
         .unwrap();
 
+      let admin_pass = x
+        .call_on_name("server_admin_key", |x: &mut EditView| x.get_content())
+        .unwrap();
+
+      if !verify_server_pass(&admin_pass, conf.admin_pass_hash.as_ref().unwrap()).unwrap() {
+        x.add_layer(
+          Dialog::around(TextView::new("Invalid Sever Administrator Password"))
+            .dismiss_button("Ok"),
+        );
+        return;
+      }
+
       let url = x
         .call_on_name("server_url", |x: &mut EditView| x.get_content())
         .unwrap();
@@ -82,6 +97,11 @@ pub fn new_server(conf: Ptr<Config>) -> ResizedView<ResizedView<Dialog>> {
       let api = x
         .call_on_name("api_key", |x: &mut EditView| x.get_content())
         .unwrap();
+
+      let mut key = None;
+      if api.as_str() != "" {
+        key = Some(encrypt_with_key(&admin_pass, api.as_str()).into_boxed_str());
+      }
 
       let img = x
         .call_on_name("img", |x: &mut Checkbox| x.is_checked())
@@ -100,11 +120,7 @@ pub fn new_server(conf: Ptr<Config>) -> ResizedView<ResizedView<Dialog>> {
         LlamaServer {
           name: model.to_string().into_boxed_str(),
           url: url.to_string().into_boxed_str(),
-          apikey: if api.as_str() == "" {
-            None
-          } else {
-            Some(api.to_string().into_boxed_str())
-          },
+          apikey: key,
           capabilities: {
             let mut capab = Capabilities(0u16);
 
@@ -122,6 +138,8 @@ pub fn new_server(conf: Ptr<Config>) -> ResizedView<ResizedView<Dialog>> {
           },
         },
       );
+
+      x.pop_layer();
     })
     .dismiss_button("Cancel")
     .padding(Margins::lrtb(1, 1, 1, 1))

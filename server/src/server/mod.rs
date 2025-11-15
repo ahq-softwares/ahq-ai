@@ -124,10 +124,6 @@ pub async fn main() -> std::io::Result<()> {
       .string(&"Please DO NOT use Ctrl+C to terminate. It will lead to data corruption!")
   );
 
-  chalk.reset_style().blue().bold().println(
-    &"Server state has been successfully set! Closing server. Session tokens will be discarded.",
-  );
-
   out
 }
 

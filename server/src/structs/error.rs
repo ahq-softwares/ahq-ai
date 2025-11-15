@@ -1,6 +1,7 @@
 use actix_web::http::StatusCode;
 use base64::DecodeError;
 use mongodb::error::Error as MongoDBError;
+use rand::rand_core::OsError;
 use redis::RedisError;
 use thiserror::Error;
 
@@ -32,6 +33,8 @@ pub enum ServerError {
   RetryFailed,
   #[error("Argon Hashing Error")]
   ArgonErr(ArgonErr),
+  #[error(transparent)]
+  RngErr(#[from] OsError),
 }
 
 impl actix_web::error::ResponseError for ServerError {
