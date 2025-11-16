@@ -40,10 +40,7 @@ pub static REAL_ADMIN_PASSWORD: OnceLock<SecretString> = OnceLock::new();
 pub fn launch() -> Chalk {
   let mut chalk = Chalk::new();
 
-  chalk
-    .blue()
-    .bold()
-    .println(&format!("AHQ-AI Server v{}", env!("CARGO_PKG_VERSION")));
+  info!("AHQ-AI Server v{}", env!("CARGO_PKG_VERSION"));
 
   chalk.reset_style();
 
@@ -102,7 +99,7 @@ pub async fn main() -> std::io::Result<()> {
   .workers(available_parallelism()?.get());
 
   for (host, port) in &CONFIG.binds {
-    chalk.blue().println(&format!("Binding to {host}:{port}"));
+    info!("Binding to {host}:{port}");
     server = server.bind((host as &str, *port))?
   }
 
@@ -153,12 +150,12 @@ fn request_admin_passwd() -> bool {
       panic!("Invalid Password was provided")
     }
 
-    warn!("");
-    warn!("----------------");
-    warn!("SERVER ADMIN PASSWORD AUTH SUCCESSFUL");
-    warn!("SERVER WILL START UP NOW");
-    warn!("----------------");
-    warn!("");
+    info!("");
+    info!("----------------");
+    info!("SERVER ADMIN PASSWORD AUTH SUCCESSFUL");
+    info!("SERVER WILL START UP NOW");
+    info!("----------------");
+    info!("");
 
     REAL_ADMIN_PASSWORD
       .set(SecretString::from(passwd))

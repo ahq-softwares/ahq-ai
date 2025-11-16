@@ -27,9 +27,10 @@ pub enum HashResp {
 
 impl HashingAgent {
   pub fn new() -> Self {
+    // `Total threads - 1` so that at least 1 thread is kept idle
     let threads = available_parallelism()
       .expect("Unable to get parallelism")
-      .get();
+      .get() - 1;
 
     let (tx, rx) = bounded::<HashResp>(2 * threads);
 

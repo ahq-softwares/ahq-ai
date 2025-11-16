@@ -2,8 +2,7 @@ use std::sync::LazyLock;
 
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
 use argon2::{
-  Algorithm, Argon2, Params, PasswordHash, PasswordHasher, Version,
-  password_hash::SaltString,
+  Algorithm, Argon2, Params, PasswordHash, PasswordHasher, RECOMMENDED_SALT_LEN, Version, password_hash::SaltString
 };
 use base64::{Engine, prelude::BASE64_STANDARD};
 use rand::{TryRngCore, rngs::OsRng};
@@ -38,10 +37,10 @@ static HASHARGON: LazyLock<Argon2> = LazyLock::new(|| {
   Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
 });
 
-static SALT_LEN: usize = 32;
+pub static SALT_LEN: usize = RECOMMENDED_SALT_LEN * 2;
 
 pub fn hash_pass(pwd: &str, rng: &mut OsRng) -> Returns<String> {
-  let mut salt_bytes = [0u8; SALT_LEN * 2];
+  let mut salt_bytes = [0u8; SALT_LEN];
 
   rng.try_fill_bytes(&mut salt_bytes)?;
 
@@ -67,14 +66,15 @@ pub fn verify(pwd: &str, hash: &str) -> Returns<bool> {
 }
 
 pub mod server {
+  use crate::auth::argon::SALT_LEN;
   use crate::structs::error::ServerError;
   use crate::{auth::argon::KEYARGON, structs::error::Returns};
-  use argon2::{PasswordHash, PasswordHasher, RECOMMENDED_SALT_LEN, password_hash::SaltString};
+  use argon2::{PasswordHash, PasswordHasher, password_hash::SaltString};
   use rand::{TryRngCore, rngs::OsRng};
 
   /// Use only in the Terminal User Interface
   pub fn hash_server_pass(pwd: &str) -> Returns<String> {
-    let mut salt_bytes = [0u8; RECOMMENDED_SALT_LEN * 2];
+    let mut salt_bytes = [0u8; SALT_LEN];
 
     OsRng::default().try_fill_bytes(&mut salt_bytes)?;
 

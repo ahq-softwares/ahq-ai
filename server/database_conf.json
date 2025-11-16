@@ -1,7 +1,7 @@
 {
   "version": 1,
   "authdb": {
-    "db": "mongodb",
+    "db": "moka",
     "url": "mongodb+srv://admin:QO0MH3ZfIxdcvSiv@cluster0.0nvfpdd.mongodb.net/?appName=Cluster0"
   },
   "cache": {

@@ -1,5 +1,5 @@
 #![feature(duration_constructors)]
-use std::{env::args, panic};
+use std::{env::args, panic, process};
 
 mod log;
 mod server;
@@ -53,6 +53,8 @@ fn main() {
     } else {
       println!("ERR: Unknown");
     }
+
+    process::exit(1);
   }));
 
   let mut args = args();
