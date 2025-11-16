@@ -7,15 +7,15 @@ pub fn setup() {
   let mut chalk = Chalk::new();
   let info = chalk.blue().string(&"INFO").leak();
   let warn = chalk.yellow().string(&"WARN").leak();
-  let err = chalk.red().bold().string(&"ERROR").leak();
+  let err = chalk.red().bold().string(&"ERRR").leak();
 
   let fe = fern::Dispatch::new()
     .format(|out, message, record| {
       let mut chalk = Chalk::new();
 
       let (level, msg) = match record.level() {
-        Level::Trace => ("TRACE", message.to_string()),
-        Level::Debug => ("DEBUG", message.to_string()),
+        Level::Trace => ("TRCE", message.to_string()),
+        Level::Debug => ("DEBG", message.to_string()),
         Level::Info => (&*info, chalk.blue().string(&message)),
         Level::Warn => (&*warn, chalk.yellow().string(&message)),
         Level::Error => (&*err, chalk.red().bold().string(&message)),
