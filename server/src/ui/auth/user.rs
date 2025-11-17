@@ -56,14 +56,7 @@ pub fn render(l: &mut LinearLayout, can_register: bool, memory: u32, time: u32) 
 
   l.add_child(DummyView::new().fixed_height(2));
 
-  l.add_child(
-    TextView::new("⚒ Argon2")
-      .align(Align::center())
-      .style(Style::merge(&[
-        Effect::Dim.into(),
-        Effect::Underline.into(),
-      ])),
-  );
+  l.add_child(TextView::new("⚒ Argon2").style(Style::merge(&[Effect::Underline.into()])));
 
   l.add_child(
     LinearLayout::horizontal()
@@ -141,25 +134,28 @@ pub fn render(l: &mut LinearLayout, can_register: bool, memory: u32, time: u32) 
 
   l.add_child(DummyView::new().fixed_height(2));
 
-  l.add_child(
-    TextView::new("Miscellaneous")
-      .align(Align::center())
-      .style(Style::merge(&[
-        Effect::Dim.into(),
-        Effect::Underline.into(),
-      ])),
-  );
+  l.add_child(TextView::new("Miscellaneous").style(Style::merge(&[Effect::Underline.into()])));
 
   l.add_child(
     LinearLayout::horizontal()
       .child(TextView::new("⚒ Account Manager").full_width())
-      .child(Button::new_raw("Use Admin API ↗", |_| {})),
+      .child(Button::new_raw("Use the admin binary ↗", |x| {
+        x.add_layer(
+          Dialog::around(
+            TextView::new("AHQ AI team provides a dedicated cli application to manage server users (accounts and tokens) for the whole AHQ AI server. You should look into that. Also, you may review the source code to obtain the api endpoints to manage these.")
+          )
+          .title("Server Administrator Portal")
+          .dismiss_button("Ok")
+          .min_width(32)
+          .max_width(64)
+        );
+      })),
   );
 
   l.add_child(DummyView::new().fixed_height(2));
 
   l.add_child(
-    TextView::new("User Auth")
+    TextView::new("About User Auth")
       .align(Align::center())
       .style(Style::merge(&[
         Effect::Dim.into(),

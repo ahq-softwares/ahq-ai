@@ -22,11 +22,18 @@
   },
   "database": {
     "authdb": {
-      "db": "mongodb",
-      "url": ""
+      "db": "tikv",
+      "endpoints": [],
+      "tls_config": {
+        "ca_path": "",
+        "cert_path": "",
+        "key_path": ""
+      },
+      "timeout_secs": 30
     },
     "cache": {
-      "db": "moka"
+      "db": "redis",
+      "url": ""
     }
   }
 }
