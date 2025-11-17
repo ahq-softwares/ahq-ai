@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str, to_string_pretty};
@@ -11,7 +12,7 @@ pub mod error;
 
 const VERSION: u16 = 1;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct Config {
   pub version: u16,
   #[serde(default = "def_bind")]
@@ -29,12 +30,25 @@ fn def_bind() -> Vec<(String, u16)> {
   ]
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Default, Deserialize)]
 pub struct LlamaConfiguration {
   pub models: HashMap<Box<str>, LlamaServer>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+impl Zeroize for LlamaConfiguration {
+  fn zeroize(&mut self) {
+    // Let the keys be there as actual secret is in LlamaServer
+    self.models.iter_mut().for_each(|(_, v)| {
+      v.zeroize();
+    });
+
+    self.models.clear();
+  }
+}
+
+impl ZeroizeOnDrop for LlamaConfiguration {}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct LlamaServer {
   pub name: Box<str>,
   pub url: Box<str>,
@@ -59,7 +73,7 @@ impl ModelFlag {
 }
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Zeroize, ZeroizeOnDrop)]
 pub struct Capabilities(pub u16);
 
 impl Serialize for Capabilities {
@@ -94,7 +108,7 @@ impl Capabilities {
   }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Zeroize, ZeroizeOnDrop)]
 #[serde(tag = "kind")]
 pub enum Authentication {
   OpenToAll,

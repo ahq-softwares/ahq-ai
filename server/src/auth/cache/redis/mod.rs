@@ -3,7 +3,7 @@ use redis::{AsyncTypedCommands, Client, aio::MultiplexedConnection};
 
 use crate::{
   auth::cache::AsyncCaching,
-  server::DBCONF,
+  server::DECRYPTED_CONFIG,
   structs::{db::CacheConfig, error::Returns},
 };
 
@@ -14,7 +14,7 @@ pub struct RedisSessions {
 
 impl RedisSessions {
   pub async fn new() -> Self {
-    let CacheConfig::Redis { url } = &DBCONF.cache else {
+    let CacheConfig::Redis { url } = &DECRYPTED_CONFIG.read().await.database.cache else {
       unreachable!()
     };
 

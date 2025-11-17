@@ -6,7 +6,7 @@ use tokio::time::sleep;
 
 use crate::{
   auth::authserver::AuthServer,
-  server::DBCONF,
+  server::DECRYPTED_CONFIG,
   structs::{
     db::AuthDbConfig,
     error::{Returns, ServerError},
@@ -29,7 +29,7 @@ impl TikvClient {
       endpoints,
       tls_config,
       timeout_secs,
-    } = &DBCONF.authdb
+    } = &DECRYPTED_CONFIG.read().await.database.authdb
     else {
       panic!("This is not TiKV");
     };

@@ -4,7 +4,7 @@ use crate::{
     cache::{AsyncCaching, moka::MokaSessions, redis::RedisSessions},
     hash::HashingAgent,
   },
-  server::{CONFIG, DBCONF},
+  server::CONFIG,
   structs::{
     Authentication,
     db::{AuthDbConfig, CacheConfig},
@@ -62,7 +62,7 @@ impl AuthSessionManager {
     let accounts: Box<dyn AuthServer + Send + Sync>;
     let sessions: Box<dyn AsyncCaching + Send + Sync>;
 
-    match &DBCONF.authdb {
+    match &CONFIG.database.authdb {
       AuthDbConfig::Moka {} => {
         warn!(
           "CRITICAL WARNING! YOU ARE USING MOKA DB WHICH NEITHER HAS PERSISTENCE NOR IS RECOMMENDED FOR PRODUCTION IN ANY MEANS. PLEASE SHIFT TO A MORE ROBUST DB IMPLEMENTATION LIKE MONGODB OR TIKV FOR EVEN A HOBBY SERVER."
@@ -73,7 +73,7 @@ impl AuthSessionManager {
       AuthDbConfig::Tikv { .. } => accounts = Box::new(TikvClient::new().await),
     };
 
-    match &DBCONF.cache {
+    match &CONFIG.database.cache {
       CacheConfig::Moka => sessions = Box::new(MokaSessions::new()),
       CacheConfig::Redis { .. } => sessions = Box::new(RedisSessions::new().await),
     };

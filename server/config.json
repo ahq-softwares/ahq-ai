@@ -10,16 +10,9 @@
       3000
     ]
   ],
-  "admin_pass_hash": "$argon2id$v=19$m=65536,t=2,p=1$52oRCNOAHwegYs0TeasfMvCf6KHSIFIpv7vYSk8D1BM$ZaPqHAWT52qT0OPAri1WRF81RnYi/DSItumt/iBEfy4",
+  "admin_pass_hash": "$argon2id$v=19$m=32768,t=2,p=1$OG0Rq9RH17YzH68z4OQ4qQVzXDp04YtV4bZddJurR7c$egASkkoXrChmCVg30M738NK0zcusMXYYyBFTDBNtUoE",
   "llama": {
-    "models": {
-      "veDpnuST0OH34+ZFGQz2Ub19NlAcgmkr": {
-        "name": "AHQ AI 2.0",
-        "url": "http://localhost:3124",
-        "capabilities": 4,
-        "apikey": "c7Mp7sw92REbiP4ybSoLxYze8DfAhaRxptYeC7fcqAq2PzXEsVhJKpG7BktMPgM7E9mqMSE9NvPiP9GekTK4sVfGCB6Kvg=="
-      }
-    }
+    "models": {}
   },
   "authentication": {
     "kind": "Account",

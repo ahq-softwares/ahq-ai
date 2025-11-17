@@ -50,13 +50,20 @@ struct AdminDeleteRequest<'a> {
   unique_id: String,
 }
 
-fn verify_auth<'a>(passwd: &'a str) -> Result<(), HttpResponse> {
+async fn verify_auth<'a>(passwd: &'a str) -> Result<(), HttpResponse> {
   let value = REAL_ADMIN_PASSWORD
     .get()
-    .map(|x| passwd == x.expose_secret())
-    .unwrap_or(false);
+    .map(|x| async move { passwd == x.read().await.expose_secret() });
 
-  match value {
+  let val;
+
+  if let Some(v) = value {
+    val = v.await;
+  } else {
+    val = false;
+  }
+
+  match val {
     true => Ok(()),
     _ => Err(HttpResponse::Unauthorized().body(r#"{ "msg": "Unauthorized" }"#)),
   }
@@ -66,7 +73,7 @@ fn verify_auth<'a>(passwd: &'a str) -> Result<(), HttpResponse> {
 async fn verify(body: Bytes) -> Result<impl Responder> {
   let auth: AdminAuthRequest = from_slice(&body)?;
 
-  if let Err(r) = verify_auth(auth.password) {
+  if let Err(r) = verify_auth(auth.password).await {
     return Ok(r);
   }
 
@@ -79,7 +86,7 @@ async fn verify(body: Bytes) -> Result<impl Responder> {
 async fn list(body: Bytes) -> Result<impl Responder> {
   let data: AdminSearchRequest = from_slice(&body)?;
 
-  if let Err(r) = verify_auth(data.password) {
+  if let Err(r) = verify_auth(data.password).await {
     return Ok(r);
   }
 
@@ -118,7 +125,7 @@ fn user_list_stream<'a>(
 async fn create(body: Bytes) -> Result<impl Responder> {
   let data: AdminUserCreateRequest = from_slice(&body)?;
 
-  if let Err(r) = verify_auth(data.password) {
+  if let Err(r) = verify_auth(data.password).await {
     return Ok(r);
   }
 
@@ -152,7 +159,7 @@ async fn create(body: Bytes) -> Result<impl Responder> {
 async fn create_token(body: Bytes) -> Result<impl Responder> {
   let auth: AdminAuthRequest = from_slice(&body)?;
 
-  if let Err(r) = verify_auth(auth.password) {
+  if let Err(r) = verify_auth(auth.password).await {
     return Ok(r);
   }
 
@@ -188,7 +195,7 @@ async fn create_token(body: Bytes) -> Result<impl Responder> {
 async fn delete(body: Bytes) -> Result<impl Responder> {
   let data: AdminDeleteRequest = from_slice(&body)?;
 
-  if let Err(r) = verify_auth(data.password) {
+  if let Err(r) = verify_auth(data.password).await {
     return Ok(r);
   }
 

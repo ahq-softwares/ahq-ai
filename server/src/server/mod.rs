@@ -1,18 +1,22 @@
-use std::{
-  env, fs as stdfs,
-  sync::{LazyLock, OnceLock},
-  thread::available_parallelism,
-};
-
 use crate::{
-  auth::{AuthSessionManager, argon::server::verify_server_pass},
-  structs::{Authentication, Config, db::DatabaseConfig},
+  auth::{
+    AuthSessionManager,
+    argon::{self, server::verify_server_pass},
+  },
+  structs::{Authentication, Config},
 };
 use actix_web::{App, HttpServer, web};
 use chalk_rs::Chalk;
 use log::*;
-use secrecy::SecretString;
+use secrecy::{ExposeSecret, SecretString};
 use serde_json::from_str;
+use std::{
+  env, fs as stdfs,
+  sync::{LazyLock, OnceLock},
+  thread::{self, available_parallelism},
+};
+use tokio::sync::RwLock;
+use zeroize::Zeroize;
 
 pub mod admin;
 pub mod auth;
@@ -23,19 +27,43 @@ pub mod llama;
 
 pub mod ffi;
 
+// This is the encrypted config
 pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
   let data = stdfs::read_to_string("config.json").expect("Unable to load config");
 
   from_str(&data).expect("Invalid configuration file, unable to parse")
 });
 
-pub static DBCONF: LazyLock<DatabaseConfig> = LazyLock::new(|| DatabaseConfig::get());
-
-// pub static HISTORY_LENGTH: LazyLock<usize> = LazyLock::new(|| CONFIG.ollama.msgs.saturating_mul(2));
+pub static DECRYPTED_CONFIG: LazyLock<RwLock<Config>> = LazyLock::new(|| decrypt_config());
 
 pub static AUTH: OnceLock<AuthSessionManager> = OnceLock::new();
 
-pub static REAL_ADMIN_PASSWORD: OnceLock<SecretString> = OnceLock::new();
+pub static REAL_ADMIN_PASSWORD: OnceLock<RwLock<SecretString>> = OnceLock::new();
+
+fn decrypt_config() -> RwLock<Config> {
+  // Decrypt config
+  if let Some(pass) = REAL_ADMIN_PASSWORD.get() {
+    let mut conf = CONFIG.clone();
+
+    let conf = thread::spawn(move || {
+      argon::decrypt_config(pass.blocking_read().expose_secret(), &mut conf);
+
+      conf
+    })
+    .join()
+    .expect("Unable to decrypt config");
+
+    info!("Successfully decrypted configuration");
+
+    return RwLock::new(conf);
+  }
+
+  warn!(
+    "No Server Administrator Password found to perform decryption, double check if this is a bug. If it is, create an issue immediately at https://github.com/ahq-softwares/ahq-ai/issues"
+  );
+
+  RwLock::new(CONFIG.clone())
+}
 
 pub fn launch() -> Chalk {
   let mut chalk = Chalk::new();
@@ -51,10 +79,22 @@ pub fn launch() -> Chalk {
 pub async fn main() -> std::io::Result<()> {
   let mut chalk = launch();
 
+  let admin_api = request_admin_passwd();
+
+  info!("Decrypting configuration...");
+
+  // Explicitly trigger the LazyLock initialization now that the password is set
+  // This guarantees decryption before the server starts.
+  _ = DECRYPTED_CONFIG.read().await;
+
+  info!("Decryption successful...");
+
   let auth = !matches!(CONFIG.authentication, Authentication::OpenToAll);
   let mut registration_api = false;
 
   if auth {
+    info!("Starting up authentication manager using the decrypted configuration.");
+
     if let Authentication::Account {
       registration_allowed,
       ..
@@ -65,8 +105,6 @@ pub async fn main() -> std::io::Result<()> {
 
     _ = AUTH.set(AuthSessionManager::create().await);
   }
-
-  let admin_api = request_admin_passwd();
 
   let mut server = HttpServer::new(move || {
     let mut app = App::new()
@@ -111,6 +149,15 @@ pub async fn main() -> std::io::Result<()> {
     error!("Server exited in an error state.");
     error!("{e}");
   }
+
+  info!("Zeroizing the decrypted configuration and server administrator key");
+
+  DECRYPTED_CONFIG.write().await.zeroize();
+  if let Some(x) = REAL_ADMIN_PASSWORD.get() {
+    x.write().await.zeroize();
+  }
+
+  info!("Zeroized successfully");
 
   warn!("Ctrl+C detected (most probably). Starting shutdown procedure. This might take a while.");
   info!(
@@ -158,7 +205,7 @@ fn request_admin_passwd() -> bool {
     info!("");
 
     REAL_ADMIN_PASSWORD
-      .set(SecretString::from(passwd))
+      .set(RwLock::new(SecretString::from(passwd)))
       .expect("Impossible Error");
 
     return true;

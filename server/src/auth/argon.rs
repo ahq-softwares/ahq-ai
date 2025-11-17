@@ -7,11 +7,13 @@ use argon2::{
 };
 use base64::{Engine, prelude::BASE64_STANDARD};
 use rand::{TryRngCore, rngs::OsRng};
+use zeroize::Zeroize;
 
 use crate::{
   server::CONFIG,
   structs::{
     Authentication, Config,
+    db::{AuthDbConfig, CacheConfig},
     error::{Returns, ServerError},
   },
 };
@@ -19,7 +21,19 @@ use crate::{
 const KEY_LEN: usize = 32;
 
 static KEYARGON: LazyLock<Argon2> = LazyLock::new(|| {
-  let params = Params::new(64 * 1024, 2, 1, Some(KEY_LEN)).unwrap();
+  #[cfg(debug_assertions)]
+  let iterations = 2;
+
+  #[cfg(debug_assertions)]
+  let memory = 32;
+
+  #[cfg(not(debug_assertions))]
+  let iterations = 5;
+
+  #[cfg(not(debug_assertions))]
+  let memory = 128;
+
+  let params = Params::new(memory * 1024, iterations, 1, Some(KEY_LEN)).unwrap();
 
   Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
 });
@@ -114,7 +128,7 @@ pub fn encrypt_with_key(pwd: &str, data: &str) -> String {
     salt_bytes
   };
 
-  let key = {
+  let mut key = {
     let mut key_bytes = [0u8; KEY_LEN];
 
     KEYARGON
@@ -138,6 +152,8 @@ pub fn encrypt_with_key(pwd: &str, data: &str) -> String {
 
   let ciphertext_with_tag = aes.encrypt(nonce, data.as_bytes()).unwrap();
 
+  key.zeroize();
+
   let mut out = Vec::from(salt);
   out.extend(nonce_slice);
   out.extend(ciphertext_with_tag.into_iter());
@@ -155,7 +171,7 @@ pub fn decrypt_with_key(pwd: &str, data: &str) -> String {
 
   let cipher = &raw[(SALT_LEN + NONCE_LEN)..];
 
-  let key = {
+  let mut key = {
     let mut key_bytes = [0u8; KEY_LEN];
 
     KEYARGON
@@ -166,6 +182,8 @@ pub fn decrypt_with_key(pwd: &str, data: &str) -> String {
   };
 
   let aes = { Aes256Gcm::new_from_slice(&key).unwrap() };
+
+  key.zeroize();
 
   let ciphertext_with_tag = aes.decrypt(nonce, cipher).unwrap();
 
@@ -178,6 +196,11 @@ pub fn migrate_key(old_pass: &str, new_pass: &str, encrypted: &str) -> String {
   encrypt_with_key(new_pass, &data)
 }
 
+// Since all the important / potentially dangerous is leaked credentials
+// are encrypted in config itself
+//
+// We must decrypt and re-encrypt with my new password when the admin password
+// changes
 pub fn migrate_config(old_pass: &str, new_pass: &str, config: &mut Config) {
   {
     config.llama.models.iter_mut().for_each(|(_, v)| {
@@ -185,5 +208,61 @@ pub fn migrate_config(old_pass: &str, new_pass: &str, config: &mut Config) {
         *api = migrate_key(old_pass, new_pass, &api).into_boxed_str();
       }
     });
+  }
+
+  {
+    match &mut config.database.authdb {
+      AuthDbConfig::Mongodb { url } => {
+        *url = migrate_key(old_pass, new_pass, &url).into_boxed_str();
+      }
+      AuthDbConfig::Tikv { endpoints, .. } => {
+        endpoints.iter_mut().for_each(|data| {
+          *data = migrate_key(old_pass, new_pass, &data).into_boxed_str();
+        });
+      }
+      AuthDbConfig::Moka { .. } => {}
+    }
+  }
+
+  {
+    match &mut config.database.cache {
+      CacheConfig::Moka => {}
+      CacheConfig::Redis { url } => {
+        *url = migrate_key(old_pass, new_pass, &url).into_boxed_str();
+      }
+    }
+  }
+}
+
+pub fn decrypt_config(pass: &str, config: &mut Config) {
+  {
+    config.llama.models.iter_mut().for_each(|(_, v)| {
+      if let Some(api) = &mut v.apikey {
+        *api = decrypt_with_key(pass, &api).into_boxed_str();
+      }
+    });
+  }
+
+  {
+    match &mut config.database.authdb {
+      AuthDbConfig::Mongodb { url } => {
+        *url = decrypt_with_key(pass, &url).into_boxed_str();
+      }
+      AuthDbConfig::Tikv { endpoints, .. } => {
+        endpoints.iter_mut().for_each(|data| {
+          *data = decrypt_with_key(pass, &data).into_boxed_str();
+        });
+      }
+      AuthDbConfig::Moka { .. } => {}
+    }
+  }
+
+  {
+    match &mut config.database.cache {
+      CacheConfig::Moka => {}
+      CacheConfig::Redis { url } => {
+        *url = decrypt_with_key(pass, &url).into_boxed_str();
+      }
+    }
   }
 }

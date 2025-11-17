@@ -6,7 +6,7 @@ use tokio::spawn;
 
 use crate::{
   auth::authserver::AuthServer,
-  server::DBCONF,
+  server::DECRYPTED_CONFIG,
   structs::{db::AuthDbConfig, error::Returns},
 };
 
@@ -24,7 +24,7 @@ pub struct MongodbClient {
 
 impl MongodbClient {
   pub async fn new() -> Self {
-    let AuthDbConfig::Mongodb { url } = &DBCONF.authdb else {
+    let AuthDbConfig::Mongodb { url } = &DECRYPTED_CONFIG.read().await.database.authdb else {
       unreachable!()
     };
 
