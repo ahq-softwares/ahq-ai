@@ -4,21 +4,69 @@
 extern crate std;
 #[prelude_import]
 use std::prelude::rust_2024::*;
-use std::{env::args, panic};
+use std::{env::args, panic, process};
+mod log {
+    use std::time::SystemTime;
+    use chalk_rs::Chalk;
+    use log::Level;
+    pub fn setup() {
+        let mut chalk = Chalk::new();
+        let info = chalk.blue().string(&"INFO").leak();
+        let warn = chalk.yellow().string(&"WARN").leak();
+        let err = chalk.red().bold().string(&"ERRR").leak();
+        let fe = fern::Dispatch::new()
+            .format(|out, message, record| {
+                let mut chalk = Chalk::new();
+                let (level, msg) = match record.level() {
+                    Level::Trace => ("TRCE", message.to_string()),
+                    Level::Debug => ("DEBG", message.to_string()),
+                    Level::Info => (&*info, chalk.blue().string(&message)),
+                    Level::Warn => (&*warn, chalk.yellow().string(&message)),
+                    Level::Error => (&*err, chalk.red().bold().string(&message)),
+                };
+                let target_str = record.target();
+                let target = if target_str.starts_with("ahqai_server::") {
+                    "".into()
+                } else {
+                    chalk
+                        .reset_style()
+                        .dim()
+                        .string(
+                            &::alloc::__export::must_use({
+                                ::alloc::fmt::format(format_args!("({0})", target_str))
+                            }),
+                        )
+                };
+                out.finish(
+                    format_args!(
+                        "[{0} {1}] {2} {3}",
+                        humantime::format_rfc3339_seconds(SystemTime::now()),
+                        level,
+                        msg,
+                        target,
+                    ),
+                )
+            });
+        let fe = fe.level(log::LevelFilter::Debug);
+        fe.chain(std::io::stdout()).apply().unwrap();
+    }
+}
 mod server {
-    use std::{
-        env, fs as stdfs, sync::{LazyLock, OnceLock},
-        thread::available_parallelism,
-    };
     use crate::{
-        auth::AuthSessionManager, structs::{Authentication, Config, db::DatabaseConfig},
+        auth::{AuthSessionManager, argon::{self, server::verify_server_pass}},
+        structs::{Authentication, Config},
     };
     use actix_web::{App, HttpServer, web};
-    use bcrypt::verify;
     use chalk_rs::Chalk;
-    use ollama_rs::Ollama;
-    use secrecy::SecretString;
+    use log::*;
+    use secrecy::{ExposeSecret, SecretString};
     use serde_json::from_str;
+    use std::{
+        env, fs as stdfs, sync::{LazyLock, OnceLock},
+        thread::{self, available_parallelism},
+    };
+    use tokio::sync::RwLock;
+    use zeroize::Zeroize;
     pub mod admin {
         use actix_web::{
             HttpResponse, HttpResponseBuilder, Responder, Result, delete,
@@ -1037,12 +1085,17 @@ mod server {
                 }
             }
         };
-        fn verify_auth<'a>(passwd: &'a str) -> Result<(), HttpResponse> {
+        async fn verify_auth<'a>(passwd: &'a str) -> Result<(), HttpResponse> {
             let value = REAL_ADMIN_PASSWORD
                 .get()
-                .map(|x| passwd == x.expose_secret())
-                .unwrap_or(false);
-            match value {
+                .map(|x| async move { passwd == x.read().await.expose_secret() });
+            let val;
+            if let Some(v) = value {
+                val = v.await;
+            } else {
+                val = false;
+            }
+            match val {
                 true => Ok(()),
                 _ => {
                     Err(
@@ -1057,7 +1110,7 @@ mod server {
             fn register(self, __config: &mut actix_web::dev::AppService) {
                 async fn verify(body: Bytes) -> Result<impl Responder> {
                     let auth: AdminAuthRequest = from_slice(&body)?;
-                    if let Err(r) = verify_auth(auth.password) {
+                    if let Err(r) = verify_auth(auth.password).await {
                         return Ok(r);
                     }
                     Ok(HttpResponse::NoContent().body::<&[u8]>(&[]))
@@ -1075,7 +1128,7 @@ mod server {
             fn register(self, __config: &mut actix_web::dev::AppService) {
                 async fn list(body: Bytes) -> Result<impl Responder> {
                     let data: AdminSearchRequest = from_slice(&body)?;
-                    if let Err(r) = verify_auth(data.password) {
+                    if let Err(r) = verify_auth(data.password).await {
                         return Ok(r);
                     }
                     if let Some(auth) = AUTH.get() {
@@ -1150,7 +1203,7 @@ mod server {
             fn register(self, __config: &mut actix_web::dev::AppService) {
                 async fn create(body: Bytes) -> Result<impl Responder> {
                     let data: AdminUserCreateRequest = from_slice(&body)?;
-                    if let Err(r) = verify_auth(data.password) {
+                    if let Err(r) = verify_auth(data.password).await {
                         return Ok(r);
                     }
                     let Authentication::Account { .. } = CONFIG.authentication else {
@@ -1211,7 +1264,7 @@ mod server {
             fn register(self, __config: &mut actix_web::dev::AppService) {
                 async fn create_token(body: Bytes) -> Result<impl Responder> {
                     let auth: AdminAuthRequest = from_slice(&body)?;
-                    if let Err(r) = verify_auth(auth.password) {
+                    if let Err(r) = verify_auth(auth.password).await {
                         return Ok(r);
                     }
                     let Authentication::Account { .. } = CONFIG.authentication else {
@@ -1229,7 +1282,7 @@ mod server {
                                 )
                             }
                             AccountCreateOutcome::SuccessfulOut(out) => {
-                                Ok(HttpResponse::NoContent().body(Bytes::from_owner(out)))
+                                Ok(HttpResponse::Ok().body(Bytes::from_owner(out)))
                             }
                             AccountCreateOutcome::UsernameExists => {
                                 Ok(
@@ -1269,7 +1322,7 @@ mod server {
             fn register(self, __config: &mut actix_web::dev::AppService) {
                 async fn delete(body: Bytes) -> Result<impl Responder> {
                     let data: AdminDeleteRequest = from_slice(&body)?;
-                    if let Err(r) = verify_auth(data.password) {
+                    if let Err(r) = verify_auth(data.password).await {
                         return Ok(r);
                     }
                     let Authentication::Account { .. } = CONFIG.authentication else {
@@ -1902,2053 +1955,6 @@ mod server {
             }
         }
     }
-    pub mod chat {
-        use crate::server::{
-            AUTH, CONFIG, HISTORY_LENGTH, OLLAMA,
-            chat::ollama::{Message, OllamaMsgResp, OllamaRequest},
-        };
-        use actix_web::{HttpRequest, HttpResponse, Result, rt, web::Payload};
-        use actix_ws::{AggregatedMessage, Session};
-        use ollama_rs::generation::{
-            chat::{ChatMessage, MessageRole, request::ChatMessageRequest},
-            images::Image,
-        };
-        pub mod ollama {
-            use serde::{Deserialize, Serialize};
-            pub type History = Vec<Message>;
-            #[serde(tag = "user")]
-            pub enum Message {
-                User { message: String, images: Option<Vec<String>> },
-                System { prompt: String },
-                Assistant { message: String, thinking: Option<String> },
-            }
-            #[automatically_derived]
-            impl ::core::fmt::Debug for Message {
-                #[inline]
-                fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-                    match self {
-                        Message::User { message: __self_0, images: __self_1 } => {
-                            ::core::fmt::Formatter::debug_struct_field2_finish(
-                                f,
-                                "User",
-                                "message",
-                                __self_0,
-                                "images",
-                                &__self_1,
-                            )
-                        }
-                        Message::System { prompt: __self_0 } => {
-                            ::core::fmt::Formatter::debug_struct_field1_finish(
-                                f,
-                                "System",
-                                "prompt",
-                                &__self_0,
-                            )
-                        }
-                        Message::Assistant { message: __self_0, thinking: __self_1 } => {
-                            ::core::fmt::Formatter::debug_struct_field2_finish(
-                                f,
-                                "Assistant",
-                                "message",
-                                __self_0,
-                                "thinking",
-                                &__self_1,
-                            )
-                        }
-                    }
-                }
-            }
-            #[doc(hidden)]
-            #[allow(
-                non_upper_case_globals,
-                unused_attributes,
-                unused_qualifications,
-                clippy::absolute_paths,
-            )]
-            const _: () = {
-                #[allow(unused_extern_crates, clippy::useless_attribute)]
-                extern crate serde as _serde;
-                #[automatically_derived]
-                impl _serde::Serialize for Message {
-                    fn serialize<__S>(
-                        &self,
-                        __serializer: __S,
-                    ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-                    where
-                        __S: _serde::Serializer,
-                    {
-                        match *self {
-                            Message::User { ref message, ref images } => {
-                                let mut __serde_state = _serde::Serializer::serialize_struct(
-                                    __serializer,
-                                    "Message",
-                                    0 + 1 + 1 + 1,
-                                )?;
-                                _serde::ser::SerializeStruct::serialize_field(
-                                    &mut __serde_state,
-                                    "user",
-                                    "User",
-                                )?;
-                                _serde::ser::SerializeStruct::serialize_field(
-                                    &mut __serde_state,
-                                    "message",
-                                    message,
-                                )?;
-                                _serde::ser::SerializeStruct::serialize_field(
-                                    &mut __serde_state,
-                                    "images",
-                                    images,
-                                )?;
-                                _serde::ser::SerializeStruct::end(__serde_state)
-                            }
-                            Message::System { ref prompt } => {
-                                let mut __serde_state = _serde::Serializer::serialize_struct(
-                                    __serializer,
-                                    "Message",
-                                    0 + 1 + 1,
-                                )?;
-                                _serde::ser::SerializeStruct::serialize_field(
-                                    &mut __serde_state,
-                                    "user",
-                                    "System",
-                                )?;
-                                _serde::ser::SerializeStruct::serialize_field(
-                                    &mut __serde_state,
-                                    "prompt",
-                                    prompt,
-                                )?;
-                                _serde::ser::SerializeStruct::end(__serde_state)
-                            }
-                            Message::Assistant { ref message, ref thinking } => {
-                                let mut __serde_state = _serde::Serializer::serialize_struct(
-                                    __serializer,
-                                    "Message",
-                                    0 + 1 + 1 + 1,
-                                )?;
-                                _serde::ser::SerializeStruct::serialize_field(
-                                    &mut __serde_state,
-                                    "user",
-                                    "Assistant",
-                                )?;
-                                _serde::ser::SerializeStruct::serialize_field(
-                                    &mut __serde_state,
-                                    "message",
-                                    message,
-                                )?;
-                                _serde::ser::SerializeStruct::serialize_field(
-                                    &mut __serde_state,
-                                    "thinking",
-                                    thinking,
-                                )?;
-                                _serde::ser::SerializeStruct::end(__serde_state)
-                            }
-                        }
-                    }
-                }
-            };
-            #[doc(hidden)]
-            #[allow(
-                non_upper_case_globals,
-                unused_attributes,
-                unused_qualifications,
-                clippy::absolute_paths,
-            )]
-            const _: () = {
-                #[allow(unused_extern_crates, clippy::useless_attribute)]
-                extern crate serde as _serde;
-                #[automatically_derived]
-                impl<'de> _serde::Deserialize<'de> for Message {
-                    fn deserialize<__D>(
-                        __deserializer: __D,
-                    ) -> _serde::__private228::Result<Self, __D::Error>
-                    where
-                        __D: _serde::Deserializer<'de>,
-                    {
-                        #[allow(non_camel_case_types)]
-                        #[doc(hidden)]
-                        enum __Field {
-                            __field0,
-                            __field1,
-                            __field2,
-                        }
-                        #[doc(hidden)]
-                        struct __FieldVisitor;
-                        #[automatically_derived]
-                        impl<'de> _serde::de::Visitor<'de> for __FieldVisitor {
-                            type Value = __Field;
-                            fn expecting(
-                                &self,
-                                __formatter: &mut _serde::__private228::Formatter,
-                            ) -> _serde::__private228::fmt::Result {
-                                _serde::__private228::Formatter::write_str(
-                                    __formatter,
-                                    "variant identifier",
-                                )
-                            }
-                            fn visit_u64<__E>(
-                                self,
-                                __value: u64,
-                            ) -> _serde::__private228::Result<Self::Value, __E>
-                            where
-                                __E: _serde::de::Error,
-                            {
-                                match __value {
-                                    0u64 => _serde::__private228::Ok(__Field::__field0),
-                                    1u64 => _serde::__private228::Ok(__Field::__field1),
-                                    2u64 => _serde::__private228::Ok(__Field::__field2),
-                                    _ => {
-                                        _serde::__private228::Err(
-                                            _serde::de::Error::invalid_value(
-                                                _serde::de::Unexpected::Unsigned(__value),
-                                                &"variant index 0 <= i < 3",
-                                            ),
-                                        )
-                                    }
-                                }
-                            }
-                            fn visit_str<__E>(
-                                self,
-                                __value: &str,
-                            ) -> _serde::__private228::Result<Self::Value, __E>
-                            where
-                                __E: _serde::de::Error,
-                            {
-                                match __value {
-                                    "User" => _serde::__private228::Ok(__Field::__field0),
-                                    "System" => _serde::__private228::Ok(__Field::__field1),
-                                    "Assistant" => _serde::__private228::Ok(__Field::__field2),
-                                    _ => {
-                                        _serde::__private228::Err(
-                                            _serde::de::Error::unknown_variant(__value, VARIANTS),
-                                        )
-                                    }
-                                }
-                            }
-                            fn visit_bytes<__E>(
-                                self,
-                                __value: &[u8],
-                            ) -> _serde::__private228::Result<Self::Value, __E>
-                            where
-                                __E: _serde::de::Error,
-                            {
-                                match __value {
-                                    b"User" => _serde::__private228::Ok(__Field::__field0),
-                                    b"System" => _serde::__private228::Ok(__Field::__field1),
-                                    b"Assistant" => _serde::__private228::Ok(__Field::__field2),
-                                    _ => {
-                                        let __value = &_serde::__private228::from_utf8_lossy(
-                                            __value,
-                                        );
-                                        _serde::__private228::Err(
-                                            _serde::de::Error::unknown_variant(__value, VARIANTS),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        #[automatically_derived]
-                        impl<'de> _serde::Deserialize<'de> for __Field {
-                            #[inline]
-                            fn deserialize<__D>(
-                                __deserializer: __D,
-                            ) -> _serde::__private228::Result<Self, __D::Error>
-                            where
-                                __D: _serde::Deserializer<'de>,
-                            {
-                                _serde::Deserializer::deserialize_identifier(
-                                    __deserializer,
-                                    __FieldVisitor,
-                                )
-                            }
-                        }
-                        #[doc(hidden)]
-                        const VARIANTS: &'static [&'static str] = &[
-                            "User",
-                            "System",
-                            "Assistant",
-                        ];
-                        let (__tag, __content) = _serde::Deserializer::deserialize_any(
-                            __deserializer,
-                            _serde::__private228::de::TaggedContentVisitor::<
-                                __Field,
-                            >::new("user", "internally tagged enum Message"),
-                        )?;
-                        let __deserializer = _serde::__private228::de::ContentDeserializer::<
-                            __D::Error,
-                        >::new(__content);
-                        match __tag {
-                            __Field::__field0 => {
-                                #[allow(non_camel_case_types)]
-                                #[doc(hidden)]
-                                enum __Field {
-                                    __field0,
-                                    __field1,
-                                    __ignore,
-                                }
-                                #[doc(hidden)]
-                                struct __FieldVisitor;
-                                #[automatically_derived]
-                                impl<'de> _serde::de::Visitor<'de> for __FieldVisitor {
-                                    type Value = __Field;
-                                    fn expecting(
-                                        &self,
-                                        __formatter: &mut _serde::__private228::Formatter,
-                                    ) -> _serde::__private228::fmt::Result {
-                                        _serde::__private228::Formatter::write_str(
-                                            __formatter,
-                                            "field identifier",
-                                        )
-                                    }
-                                    fn visit_u64<__E>(
-                                        self,
-                                        __value: u64,
-                                    ) -> _serde::__private228::Result<Self::Value, __E>
-                                    where
-                                        __E: _serde::de::Error,
-                                    {
-                                        match __value {
-                                            0u64 => _serde::__private228::Ok(__Field::__field0),
-                                            1u64 => _serde::__private228::Ok(__Field::__field1),
-                                            _ => _serde::__private228::Ok(__Field::__ignore),
-                                        }
-                                    }
-                                    fn visit_str<__E>(
-                                        self,
-                                        __value: &str,
-                                    ) -> _serde::__private228::Result<Self::Value, __E>
-                                    where
-                                        __E: _serde::de::Error,
-                                    {
-                                        match __value {
-                                            "message" => _serde::__private228::Ok(__Field::__field0),
-                                            "images" => _serde::__private228::Ok(__Field::__field1),
-                                            _ => _serde::__private228::Ok(__Field::__ignore),
-                                        }
-                                    }
-                                    fn visit_bytes<__E>(
-                                        self,
-                                        __value: &[u8],
-                                    ) -> _serde::__private228::Result<Self::Value, __E>
-                                    where
-                                        __E: _serde::de::Error,
-                                    {
-                                        match __value {
-                                            b"message" => _serde::__private228::Ok(__Field::__field0),
-                                            b"images" => _serde::__private228::Ok(__Field::__field1),
-                                            _ => _serde::__private228::Ok(__Field::__ignore),
-                                        }
-                                    }
-                                }
-                                #[automatically_derived]
-                                impl<'de> _serde::Deserialize<'de> for __Field {
-                                    #[inline]
-                                    fn deserialize<__D>(
-                                        __deserializer: __D,
-                                    ) -> _serde::__private228::Result<Self, __D::Error>
-                                    where
-                                        __D: _serde::Deserializer<'de>,
-                                    {
-                                        _serde::Deserializer::deserialize_identifier(
-                                            __deserializer,
-                                            __FieldVisitor,
-                                        )
-                                    }
-                                }
-                                #[doc(hidden)]
-                                struct __Visitor<'de> {
-                                    marker: _serde::__private228::PhantomData<Message>,
-                                    lifetime: _serde::__private228::PhantomData<&'de ()>,
-                                }
-                                #[automatically_derived]
-                                impl<'de> _serde::de::Visitor<'de> for __Visitor<'de> {
-                                    type Value = Message;
-                                    fn expecting(
-                                        &self,
-                                        __formatter: &mut _serde::__private228::Formatter,
-                                    ) -> _serde::__private228::fmt::Result {
-                                        _serde::__private228::Formatter::write_str(
-                                            __formatter,
-                                            "struct variant Message::User",
-                                        )
-                                    }
-                                    #[inline]
-                                    fn visit_seq<__A>(
-                                        self,
-                                        mut __seq: __A,
-                                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
-                                    where
-                                        __A: _serde::de::SeqAccess<'de>,
-                                    {
-                                        let __field0 = match _serde::de::SeqAccess::next_element::<
-                                            String,
-                                        >(&mut __seq)? {
-                                            _serde::__private228::Some(__value) => __value,
-                                            _serde::__private228::None => {
-                                                return _serde::__private228::Err(
-                                                    _serde::de::Error::invalid_length(
-                                                        0usize,
-                                                        &"struct variant Message::User with 2 elements",
-                                                    ),
-                                                );
-                                            }
-                                        };
-                                        let __field1 = match _serde::de::SeqAccess::next_element::<
-                                            Option<Vec<String>>,
-                                        >(&mut __seq)? {
-                                            _serde::__private228::Some(__value) => __value,
-                                            _serde::__private228::None => {
-                                                return _serde::__private228::Err(
-                                                    _serde::de::Error::invalid_length(
-                                                        1usize,
-                                                        &"struct variant Message::User with 2 elements",
-                                                    ),
-                                                );
-                                            }
-                                        };
-                                        _serde::__private228::Ok(Message::User {
-                                            message: __field0,
-                                            images: __field1,
-                                        })
-                                    }
-                                    #[inline]
-                                    fn visit_map<__A>(
-                                        self,
-                                        mut __map: __A,
-                                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
-                                    where
-                                        __A: _serde::de::MapAccess<'de>,
-                                    {
-                                        let mut __field0: _serde::__private228::Option<String> = _serde::__private228::None;
-                                        let mut __field1: _serde::__private228::Option<
-                                            Option<Vec<String>>,
-                                        > = _serde::__private228::None;
-                                        while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
-                                            __Field,
-                                        >(&mut __map)? {
-                                            match __key {
-                                                __Field::__field0 => {
-                                                    if _serde::__private228::Option::is_some(&__field0) {
-                                                        return _serde::__private228::Err(
-                                                            <__A::Error as _serde::de::Error>::duplicate_field(
-                                                                "message",
-                                                            ),
-                                                        );
-                                                    }
-                                                    __field0 = _serde::__private228::Some(
-                                                        _serde::de::MapAccess::next_value::<String>(&mut __map)?,
-                                                    );
-                                                }
-                                                __Field::__field1 => {
-                                                    if _serde::__private228::Option::is_some(&__field1) {
-                                                        return _serde::__private228::Err(
-                                                            <__A::Error as _serde::de::Error>::duplicate_field("images"),
-                                                        );
-                                                    }
-                                                    __field1 = _serde::__private228::Some(
-                                                        _serde::de::MapAccess::next_value::<
-                                                            Option<Vec<String>>,
-                                                        >(&mut __map)?,
-                                                    );
-                                                }
-                                                _ => {
-                                                    let _ = _serde::de::MapAccess::next_value::<
-                                                        _serde::de::IgnoredAny,
-                                                    >(&mut __map)?;
-                                                }
-                                            }
-                                        }
-                                        let __field0 = match __field0 {
-                                            _serde::__private228::Some(__field0) => __field0,
-                                            _serde::__private228::None => {
-                                                _serde::__private228::de::missing_field("message")?
-                                            }
-                                        };
-                                        let __field1 = match __field1 {
-                                            _serde::__private228::Some(__field1) => __field1,
-                                            _serde::__private228::None => {
-                                                _serde::__private228::de::missing_field("images")?
-                                            }
-                                        };
-                                        _serde::__private228::Ok(Message::User {
-                                            message: __field0,
-                                            images: __field1,
-                                        })
-                                    }
-                                }
-                                #[doc(hidden)]
-                                const FIELDS: &'static [&'static str] = &[
-                                    "message",
-                                    "images",
-                                ];
-                                _serde::Deserializer::deserialize_any(
-                                    __deserializer,
-                                    __Visitor {
-                                        marker: _serde::__private228::PhantomData::<Message>,
-                                        lifetime: _serde::__private228::PhantomData,
-                                    },
-                                )
-                            }
-                            __Field::__field1 => {
-                                #[allow(non_camel_case_types)]
-                                #[doc(hidden)]
-                                enum __Field {
-                                    __field0,
-                                    __ignore,
-                                }
-                                #[doc(hidden)]
-                                struct __FieldVisitor;
-                                #[automatically_derived]
-                                impl<'de> _serde::de::Visitor<'de> for __FieldVisitor {
-                                    type Value = __Field;
-                                    fn expecting(
-                                        &self,
-                                        __formatter: &mut _serde::__private228::Formatter,
-                                    ) -> _serde::__private228::fmt::Result {
-                                        _serde::__private228::Formatter::write_str(
-                                            __formatter,
-                                            "field identifier",
-                                        )
-                                    }
-                                    fn visit_u64<__E>(
-                                        self,
-                                        __value: u64,
-                                    ) -> _serde::__private228::Result<Self::Value, __E>
-                                    where
-                                        __E: _serde::de::Error,
-                                    {
-                                        match __value {
-                                            0u64 => _serde::__private228::Ok(__Field::__field0),
-                                            _ => _serde::__private228::Ok(__Field::__ignore),
-                                        }
-                                    }
-                                    fn visit_str<__E>(
-                                        self,
-                                        __value: &str,
-                                    ) -> _serde::__private228::Result<Self::Value, __E>
-                                    where
-                                        __E: _serde::de::Error,
-                                    {
-                                        match __value {
-                                            "prompt" => _serde::__private228::Ok(__Field::__field0),
-                                            _ => _serde::__private228::Ok(__Field::__ignore),
-                                        }
-                                    }
-                                    fn visit_bytes<__E>(
-                                        self,
-                                        __value: &[u8],
-                                    ) -> _serde::__private228::Result<Self::Value, __E>
-                                    where
-                                        __E: _serde::de::Error,
-                                    {
-                                        match __value {
-                                            b"prompt" => _serde::__private228::Ok(__Field::__field0),
-                                            _ => _serde::__private228::Ok(__Field::__ignore),
-                                        }
-                                    }
-                                }
-                                #[automatically_derived]
-                                impl<'de> _serde::Deserialize<'de> for __Field {
-                                    #[inline]
-                                    fn deserialize<__D>(
-                                        __deserializer: __D,
-                                    ) -> _serde::__private228::Result<Self, __D::Error>
-                                    where
-                                        __D: _serde::Deserializer<'de>,
-                                    {
-                                        _serde::Deserializer::deserialize_identifier(
-                                            __deserializer,
-                                            __FieldVisitor,
-                                        )
-                                    }
-                                }
-                                #[doc(hidden)]
-                                struct __Visitor<'de> {
-                                    marker: _serde::__private228::PhantomData<Message>,
-                                    lifetime: _serde::__private228::PhantomData<&'de ()>,
-                                }
-                                #[automatically_derived]
-                                impl<'de> _serde::de::Visitor<'de> for __Visitor<'de> {
-                                    type Value = Message;
-                                    fn expecting(
-                                        &self,
-                                        __formatter: &mut _serde::__private228::Formatter,
-                                    ) -> _serde::__private228::fmt::Result {
-                                        _serde::__private228::Formatter::write_str(
-                                            __formatter,
-                                            "struct variant Message::System",
-                                        )
-                                    }
-                                    #[inline]
-                                    fn visit_seq<__A>(
-                                        self,
-                                        mut __seq: __A,
-                                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
-                                    where
-                                        __A: _serde::de::SeqAccess<'de>,
-                                    {
-                                        let __field0 = match _serde::de::SeqAccess::next_element::<
-                                            String,
-                                        >(&mut __seq)? {
-                                            _serde::__private228::Some(__value) => __value,
-                                            _serde::__private228::None => {
-                                                return _serde::__private228::Err(
-                                                    _serde::de::Error::invalid_length(
-                                                        0usize,
-                                                        &"struct variant Message::System with 1 element",
-                                                    ),
-                                                );
-                                            }
-                                        };
-                                        _serde::__private228::Ok(Message::System {
-                                            prompt: __field0,
-                                        })
-                                    }
-                                    #[inline]
-                                    fn visit_map<__A>(
-                                        self,
-                                        mut __map: __A,
-                                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
-                                    where
-                                        __A: _serde::de::MapAccess<'de>,
-                                    {
-                                        let mut __field0: _serde::__private228::Option<String> = _serde::__private228::None;
-                                        while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
-                                            __Field,
-                                        >(&mut __map)? {
-                                            match __key {
-                                                __Field::__field0 => {
-                                                    if _serde::__private228::Option::is_some(&__field0) {
-                                                        return _serde::__private228::Err(
-                                                            <__A::Error as _serde::de::Error>::duplicate_field("prompt"),
-                                                        );
-                                                    }
-                                                    __field0 = _serde::__private228::Some(
-                                                        _serde::de::MapAccess::next_value::<String>(&mut __map)?,
-                                                    );
-                                                }
-                                                _ => {
-                                                    let _ = _serde::de::MapAccess::next_value::<
-                                                        _serde::de::IgnoredAny,
-                                                    >(&mut __map)?;
-                                                }
-                                            }
-                                        }
-                                        let __field0 = match __field0 {
-                                            _serde::__private228::Some(__field0) => __field0,
-                                            _serde::__private228::None => {
-                                                _serde::__private228::de::missing_field("prompt")?
-                                            }
-                                        };
-                                        _serde::__private228::Ok(Message::System {
-                                            prompt: __field0,
-                                        })
-                                    }
-                                }
-                                #[doc(hidden)]
-                                const FIELDS: &'static [&'static str] = &["prompt"];
-                                _serde::Deserializer::deserialize_any(
-                                    __deserializer,
-                                    __Visitor {
-                                        marker: _serde::__private228::PhantomData::<Message>,
-                                        lifetime: _serde::__private228::PhantomData,
-                                    },
-                                )
-                            }
-                            __Field::__field2 => {
-                                #[allow(non_camel_case_types)]
-                                #[doc(hidden)]
-                                enum __Field {
-                                    __field0,
-                                    __field1,
-                                    __ignore,
-                                }
-                                #[doc(hidden)]
-                                struct __FieldVisitor;
-                                #[automatically_derived]
-                                impl<'de> _serde::de::Visitor<'de> for __FieldVisitor {
-                                    type Value = __Field;
-                                    fn expecting(
-                                        &self,
-                                        __formatter: &mut _serde::__private228::Formatter,
-                                    ) -> _serde::__private228::fmt::Result {
-                                        _serde::__private228::Formatter::write_str(
-                                            __formatter,
-                                            "field identifier",
-                                        )
-                                    }
-                                    fn visit_u64<__E>(
-                                        self,
-                                        __value: u64,
-                                    ) -> _serde::__private228::Result<Self::Value, __E>
-                                    where
-                                        __E: _serde::de::Error,
-                                    {
-                                        match __value {
-                                            0u64 => _serde::__private228::Ok(__Field::__field0),
-                                            1u64 => _serde::__private228::Ok(__Field::__field1),
-                                            _ => _serde::__private228::Ok(__Field::__ignore),
-                                        }
-                                    }
-                                    fn visit_str<__E>(
-                                        self,
-                                        __value: &str,
-                                    ) -> _serde::__private228::Result<Self::Value, __E>
-                                    where
-                                        __E: _serde::de::Error,
-                                    {
-                                        match __value {
-                                            "message" => _serde::__private228::Ok(__Field::__field0),
-                                            "thinking" => _serde::__private228::Ok(__Field::__field1),
-                                            _ => _serde::__private228::Ok(__Field::__ignore),
-                                        }
-                                    }
-                                    fn visit_bytes<__E>(
-                                        self,
-                                        __value: &[u8],
-                                    ) -> _serde::__private228::Result<Self::Value, __E>
-                                    where
-                                        __E: _serde::de::Error,
-                                    {
-                                        match __value {
-                                            b"message" => _serde::__private228::Ok(__Field::__field0),
-                                            b"thinking" => _serde::__private228::Ok(__Field::__field1),
-                                            _ => _serde::__private228::Ok(__Field::__ignore),
-                                        }
-                                    }
-                                }
-                                #[automatically_derived]
-                                impl<'de> _serde::Deserialize<'de> for __Field {
-                                    #[inline]
-                                    fn deserialize<__D>(
-                                        __deserializer: __D,
-                                    ) -> _serde::__private228::Result<Self, __D::Error>
-                                    where
-                                        __D: _serde::Deserializer<'de>,
-                                    {
-                                        _serde::Deserializer::deserialize_identifier(
-                                            __deserializer,
-                                            __FieldVisitor,
-                                        )
-                                    }
-                                }
-                                #[doc(hidden)]
-                                struct __Visitor<'de> {
-                                    marker: _serde::__private228::PhantomData<Message>,
-                                    lifetime: _serde::__private228::PhantomData<&'de ()>,
-                                }
-                                #[automatically_derived]
-                                impl<'de> _serde::de::Visitor<'de> for __Visitor<'de> {
-                                    type Value = Message;
-                                    fn expecting(
-                                        &self,
-                                        __formatter: &mut _serde::__private228::Formatter,
-                                    ) -> _serde::__private228::fmt::Result {
-                                        _serde::__private228::Formatter::write_str(
-                                            __formatter,
-                                            "struct variant Message::Assistant",
-                                        )
-                                    }
-                                    #[inline]
-                                    fn visit_seq<__A>(
-                                        self,
-                                        mut __seq: __A,
-                                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
-                                    where
-                                        __A: _serde::de::SeqAccess<'de>,
-                                    {
-                                        let __field0 = match _serde::de::SeqAccess::next_element::<
-                                            String,
-                                        >(&mut __seq)? {
-                                            _serde::__private228::Some(__value) => __value,
-                                            _serde::__private228::None => {
-                                                return _serde::__private228::Err(
-                                                    _serde::de::Error::invalid_length(
-                                                        0usize,
-                                                        &"struct variant Message::Assistant with 2 elements",
-                                                    ),
-                                                );
-                                            }
-                                        };
-                                        let __field1 = match _serde::de::SeqAccess::next_element::<
-                                            Option<String>,
-                                        >(&mut __seq)? {
-                                            _serde::__private228::Some(__value) => __value,
-                                            _serde::__private228::None => {
-                                                return _serde::__private228::Err(
-                                                    _serde::de::Error::invalid_length(
-                                                        1usize,
-                                                        &"struct variant Message::Assistant with 2 elements",
-                                                    ),
-                                                );
-                                            }
-                                        };
-                                        _serde::__private228::Ok(Message::Assistant {
-                                            message: __field0,
-                                            thinking: __field1,
-                                        })
-                                    }
-                                    #[inline]
-                                    fn visit_map<__A>(
-                                        self,
-                                        mut __map: __A,
-                                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
-                                    where
-                                        __A: _serde::de::MapAccess<'de>,
-                                    {
-                                        let mut __field0: _serde::__private228::Option<String> = _serde::__private228::None;
-                                        let mut __field1: _serde::__private228::Option<
-                                            Option<String>,
-                                        > = _serde::__private228::None;
-                                        while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
-                                            __Field,
-                                        >(&mut __map)? {
-                                            match __key {
-                                                __Field::__field0 => {
-                                                    if _serde::__private228::Option::is_some(&__field0) {
-                                                        return _serde::__private228::Err(
-                                                            <__A::Error as _serde::de::Error>::duplicate_field(
-                                                                "message",
-                                                            ),
-                                                        );
-                                                    }
-                                                    __field0 = _serde::__private228::Some(
-                                                        _serde::de::MapAccess::next_value::<String>(&mut __map)?,
-                                                    );
-                                                }
-                                                __Field::__field1 => {
-                                                    if _serde::__private228::Option::is_some(&__field1) {
-                                                        return _serde::__private228::Err(
-                                                            <__A::Error as _serde::de::Error>::duplicate_field(
-                                                                "thinking",
-                                                            ),
-                                                        );
-                                                    }
-                                                    __field1 = _serde::__private228::Some(
-                                                        _serde::de::MapAccess::next_value::<
-                                                            Option<String>,
-                                                        >(&mut __map)?,
-                                                    );
-                                                }
-                                                _ => {
-                                                    let _ = _serde::de::MapAccess::next_value::<
-                                                        _serde::de::IgnoredAny,
-                                                    >(&mut __map)?;
-                                                }
-                                            }
-                                        }
-                                        let __field0 = match __field0 {
-                                            _serde::__private228::Some(__field0) => __field0,
-                                            _serde::__private228::None => {
-                                                _serde::__private228::de::missing_field("message")?
-                                            }
-                                        };
-                                        let __field1 = match __field1 {
-                                            _serde::__private228::Some(__field1) => __field1,
-                                            _serde::__private228::None => {
-                                                _serde::__private228::de::missing_field("thinking")?
-                                            }
-                                        };
-                                        _serde::__private228::Ok(Message::Assistant {
-                                            message: __field0,
-                                            thinking: __field1,
-                                        })
-                                    }
-                                }
-                                #[doc(hidden)]
-                                const FIELDS: &'static [&'static str] = &[
-                                    "message",
-                                    "thinking",
-                                ];
-                                _serde::Deserializer::deserialize_any(
-                                    __deserializer,
-                                    __Visitor {
-                                        marker: _serde::__private228::PhantomData::<Message>,
-                                        lifetime: _serde::__private228::PhantomData,
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-            };
-            #[serde(tag = "event")]
-            pub enum OllamaRequest {
-                Init { history: History },
-                ChatCompletion { prompt: String, images: Option<Vec<String>> },
-            }
-            #[automatically_derived]
-            impl ::core::fmt::Debug for OllamaRequest {
-                #[inline]
-                fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-                    match self {
-                        OllamaRequest::Init { history: __self_0 } => {
-                            ::core::fmt::Formatter::debug_struct_field1_finish(
-                                f,
-                                "Init",
-                                "history",
-                                &__self_0,
-                            )
-                        }
-                        OllamaRequest::ChatCompletion {
-                            prompt: __self_0,
-                            images: __self_1,
-                        } => {
-                            ::core::fmt::Formatter::debug_struct_field2_finish(
-                                f,
-                                "ChatCompletion",
-                                "prompt",
-                                __self_0,
-                                "images",
-                                &__self_1,
-                            )
-                        }
-                    }
-                }
-            }
-            #[doc(hidden)]
-            #[allow(
-                non_upper_case_globals,
-                unused_attributes,
-                unused_qualifications,
-                clippy::absolute_paths,
-            )]
-            const _: () = {
-                #[allow(unused_extern_crates, clippy::useless_attribute)]
-                extern crate serde as _serde;
-                #[automatically_derived]
-                impl _serde::Serialize for OllamaRequest {
-                    fn serialize<__S>(
-                        &self,
-                        __serializer: __S,
-                    ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-                    where
-                        __S: _serde::Serializer,
-                    {
-                        match *self {
-                            OllamaRequest::Init { ref history } => {
-                                let mut __serde_state = _serde::Serializer::serialize_struct(
-                                    __serializer,
-                                    "OllamaRequest",
-                                    0 + 1 + 1,
-                                )?;
-                                _serde::ser::SerializeStruct::serialize_field(
-                                    &mut __serde_state,
-                                    "event",
-                                    "Init",
-                                )?;
-                                _serde::ser::SerializeStruct::serialize_field(
-                                    &mut __serde_state,
-                                    "history",
-                                    history,
-                                )?;
-                                _serde::ser::SerializeStruct::end(__serde_state)
-                            }
-                            OllamaRequest::ChatCompletion { ref prompt, ref images } => {
-                                let mut __serde_state = _serde::Serializer::serialize_struct(
-                                    __serializer,
-                                    "OllamaRequest",
-                                    0 + 1 + 1 + 1,
-                                )?;
-                                _serde::ser::SerializeStruct::serialize_field(
-                                    &mut __serde_state,
-                                    "event",
-                                    "ChatCompletion",
-                                )?;
-                                _serde::ser::SerializeStruct::serialize_field(
-                                    &mut __serde_state,
-                                    "prompt",
-                                    prompt,
-                                )?;
-                                _serde::ser::SerializeStruct::serialize_field(
-                                    &mut __serde_state,
-                                    "images",
-                                    images,
-                                )?;
-                                _serde::ser::SerializeStruct::end(__serde_state)
-                            }
-                        }
-                    }
-                }
-            };
-            #[doc(hidden)]
-            #[allow(
-                non_upper_case_globals,
-                unused_attributes,
-                unused_qualifications,
-                clippy::absolute_paths,
-            )]
-            const _: () = {
-                #[allow(unused_extern_crates, clippy::useless_attribute)]
-                extern crate serde as _serde;
-                #[automatically_derived]
-                impl<'de> _serde::Deserialize<'de> for OllamaRequest {
-                    fn deserialize<__D>(
-                        __deserializer: __D,
-                    ) -> _serde::__private228::Result<Self, __D::Error>
-                    where
-                        __D: _serde::Deserializer<'de>,
-                    {
-                        #[allow(non_camel_case_types)]
-                        #[doc(hidden)]
-                        enum __Field {
-                            __field0,
-                            __field1,
-                        }
-                        #[doc(hidden)]
-                        struct __FieldVisitor;
-                        #[automatically_derived]
-                        impl<'de> _serde::de::Visitor<'de> for __FieldVisitor {
-                            type Value = __Field;
-                            fn expecting(
-                                &self,
-                                __formatter: &mut _serde::__private228::Formatter,
-                            ) -> _serde::__private228::fmt::Result {
-                                _serde::__private228::Formatter::write_str(
-                                    __formatter,
-                                    "variant identifier",
-                                )
-                            }
-                            fn visit_u64<__E>(
-                                self,
-                                __value: u64,
-                            ) -> _serde::__private228::Result<Self::Value, __E>
-                            where
-                                __E: _serde::de::Error,
-                            {
-                                match __value {
-                                    0u64 => _serde::__private228::Ok(__Field::__field0),
-                                    1u64 => _serde::__private228::Ok(__Field::__field1),
-                                    _ => {
-                                        _serde::__private228::Err(
-                                            _serde::de::Error::invalid_value(
-                                                _serde::de::Unexpected::Unsigned(__value),
-                                                &"variant index 0 <= i < 2",
-                                            ),
-                                        )
-                                    }
-                                }
-                            }
-                            fn visit_str<__E>(
-                                self,
-                                __value: &str,
-                            ) -> _serde::__private228::Result<Self::Value, __E>
-                            where
-                                __E: _serde::de::Error,
-                            {
-                                match __value {
-                                    "Init" => _serde::__private228::Ok(__Field::__field0),
-                                    "ChatCompletion" => {
-                                        _serde::__private228::Ok(__Field::__field1)
-                                    }
-                                    _ => {
-                                        _serde::__private228::Err(
-                                            _serde::de::Error::unknown_variant(__value, VARIANTS),
-                                        )
-                                    }
-                                }
-                            }
-                            fn visit_bytes<__E>(
-                                self,
-                                __value: &[u8],
-                            ) -> _serde::__private228::Result<Self::Value, __E>
-                            where
-                                __E: _serde::de::Error,
-                            {
-                                match __value {
-                                    b"Init" => _serde::__private228::Ok(__Field::__field0),
-                                    b"ChatCompletion" => {
-                                        _serde::__private228::Ok(__Field::__field1)
-                                    }
-                                    _ => {
-                                        let __value = &_serde::__private228::from_utf8_lossy(
-                                            __value,
-                                        );
-                                        _serde::__private228::Err(
-                                            _serde::de::Error::unknown_variant(__value, VARIANTS),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        #[automatically_derived]
-                        impl<'de> _serde::Deserialize<'de> for __Field {
-                            #[inline]
-                            fn deserialize<__D>(
-                                __deserializer: __D,
-                            ) -> _serde::__private228::Result<Self, __D::Error>
-                            where
-                                __D: _serde::Deserializer<'de>,
-                            {
-                                _serde::Deserializer::deserialize_identifier(
-                                    __deserializer,
-                                    __FieldVisitor,
-                                )
-                            }
-                        }
-                        #[doc(hidden)]
-                        const VARIANTS: &'static [&'static str] = &[
-                            "Init",
-                            "ChatCompletion",
-                        ];
-                        let (__tag, __content) = _serde::Deserializer::deserialize_any(
-                            __deserializer,
-                            _serde::__private228::de::TaggedContentVisitor::<
-                                __Field,
-                            >::new("event", "internally tagged enum OllamaRequest"),
-                        )?;
-                        let __deserializer = _serde::__private228::de::ContentDeserializer::<
-                            __D::Error,
-                        >::new(__content);
-                        match __tag {
-                            __Field::__field0 => {
-                                #[allow(non_camel_case_types)]
-                                #[doc(hidden)]
-                                enum __Field {
-                                    __field0,
-                                    __ignore,
-                                }
-                                #[doc(hidden)]
-                                struct __FieldVisitor;
-                                #[automatically_derived]
-                                impl<'de> _serde::de::Visitor<'de> for __FieldVisitor {
-                                    type Value = __Field;
-                                    fn expecting(
-                                        &self,
-                                        __formatter: &mut _serde::__private228::Formatter,
-                                    ) -> _serde::__private228::fmt::Result {
-                                        _serde::__private228::Formatter::write_str(
-                                            __formatter,
-                                            "field identifier",
-                                        )
-                                    }
-                                    fn visit_u64<__E>(
-                                        self,
-                                        __value: u64,
-                                    ) -> _serde::__private228::Result<Self::Value, __E>
-                                    where
-                                        __E: _serde::de::Error,
-                                    {
-                                        match __value {
-                                            0u64 => _serde::__private228::Ok(__Field::__field0),
-                                            _ => _serde::__private228::Ok(__Field::__ignore),
-                                        }
-                                    }
-                                    fn visit_str<__E>(
-                                        self,
-                                        __value: &str,
-                                    ) -> _serde::__private228::Result<Self::Value, __E>
-                                    where
-                                        __E: _serde::de::Error,
-                                    {
-                                        match __value {
-                                            "history" => _serde::__private228::Ok(__Field::__field0),
-                                            _ => _serde::__private228::Ok(__Field::__ignore),
-                                        }
-                                    }
-                                    fn visit_bytes<__E>(
-                                        self,
-                                        __value: &[u8],
-                                    ) -> _serde::__private228::Result<Self::Value, __E>
-                                    where
-                                        __E: _serde::de::Error,
-                                    {
-                                        match __value {
-                                            b"history" => _serde::__private228::Ok(__Field::__field0),
-                                            _ => _serde::__private228::Ok(__Field::__ignore),
-                                        }
-                                    }
-                                }
-                                #[automatically_derived]
-                                impl<'de> _serde::Deserialize<'de> for __Field {
-                                    #[inline]
-                                    fn deserialize<__D>(
-                                        __deserializer: __D,
-                                    ) -> _serde::__private228::Result<Self, __D::Error>
-                                    where
-                                        __D: _serde::Deserializer<'de>,
-                                    {
-                                        _serde::Deserializer::deserialize_identifier(
-                                            __deserializer,
-                                            __FieldVisitor,
-                                        )
-                                    }
-                                }
-                                #[doc(hidden)]
-                                struct __Visitor<'de> {
-                                    marker: _serde::__private228::PhantomData<OllamaRequest>,
-                                    lifetime: _serde::__private228::PhantomData<&'de ()>,
-                                }
-                                #[automatically_derived]
-                                impl<'de> _serde::de::Visitor<'de> for __Visitor<'de> {
-                                    type Value = OllamaRequest;
-                                    fn expecting(
-                                        &self,
-                                        __formatter: &mut _serde::__private228::Formatter,
-                                    ) -> _serde::__private228::fmt::Result {
-                                        _serde::__private228::Formatter::write_str(
-                                            __formatter,
-                                            "struct variant OllamaRequest::Init",
-                                        )
-                                    }
-                                    #[inline]
-                                    fn visit_seq<__A>(
-                                        self,
-                                        mut __seq: __A,
-                                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
-                                    where
-                                        __A: _serde::de::SeqAccess<'de>,
-                                    {
-                                        let __field0 = match _serde::de::SeqAccess::next_element::<
-                                            History,
-                                        >(&mut __seq)? {
-                                            _serde::__private228::Some(__value) => __value,
-                                            _serde::__private228::None => {
-                                                return _serde::__private228::Err(
-                                                    _serde::de::Error::invalid_length(
-                                                        0usize,
-                                                        &"struct variant OllamaRequest::Init with 1 element",
-                                                    ),
-                                                );
-                                            }
-                                        };
-                                        _serde::__private228::Ok(OllamaRequest::Init {
-                                            history: __field0,
-                                        })
-                                    }
-                                    #[inline]
-                                    fn visit_map<__A>(
-                                        self,
-                                        mut __map: __A,
-                                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
-                                    where
-                                        __A: _serde::de::MapAccess<'de>,
-                                    {
-                                        let mut __field0: _serde::__private228::Option<History> = _serde::__private228::None;
-                                        while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
-                                            __Field,
-                                        >(&mut __map)? {
-                                            match __key {
-                                                __Field::__field0 => {
-                                                    if _serde::__private228::Option::is_some(&__field0) {
-                                                        return _serde::__private228::Err(
-                                                            <__A::Error as _serde::de::Error>::duplicate_field(
-                                                                "history",
-                                                            ),
-                                                        );
-                                                    }
-                                                    __field0 = _serde::__private228::Some(
-                                                        _serde::de::MapAccess::next_value::<History>(&mut __map)?,
-                                                    );
-                                                }
-                                                _ => {
-                                                    let _ = _serde::de::MapAccess::next_value::<
-                                                        _serde::de::IgnoredAny,
-                                                    >(&mut __map)?;
-                                                }
-                                            }
-                                        }
-                                        let __field0 = match __field0 {
-                                            _serde::__private228::Some(__field0) => __field0,
-                                            _serde::__private228::None => {
-                                                _serde::__private228::de::missing_field("history")?
-                                            }
-                                        };
-                                        _serde::__private228::Ok(OllamaRequest::Init {
-                                            history: __field0,
-                                        })
-                                    }
-                                }
-                                #[doc(hidden)]
-                                const FIELDS: &'static [&'static str] = &["history"];
-                                _serde::Deserializer::deserialize_any(
-                                    __deserializer,
-                                    __Visitor {
-                                        marker: _serde::__private228::PhantomData::<OllamaRequest>,
-                                        lifetime: _serde::__private228::PhantomData,
-                                    },
-                                )
-                            }
-                            __Field::__field1 => {
-                                #[allow(non_camel_case_types)]
-                                #[doc(hidden)]
-                                enum __Field {
-                                    __field0,
-                                    __field1,
-                                    __ignore,
-                                }
-                                #[doc(hidden)]
-                                struct __FieldVisitor;
-                                #[automatically_derived]
-                                impl<'de> _serde::de::Visitor<'de> for __FieldVisitor {
-                                    type Value = __Field;
-                                    fn expecting(
-                                        &self,
-                                        __formatter: &mut _serde::__private228::Formatter,
-                                    ) -> _serde::__private228::fmt::Result {
-                                        _serde::__private228::Formatter::write_str(
-                                            __formatter,
-                                            "field identifier",
-                                        )
-                                    }
-                                    fn visit_u64<__E>(
-                                        self,
-                                        __value: u64,
-                                    ) -> _serde::__private228::Result<Self::Value, __E>
-                                    where
-                                        __E: _serde::de::Error,
-                                    {
-                                        match __value {
-                                            0u64 => _serde::__private228::Ok(__Field::__field0),
-                                            1u64 => _serde::__private228::Ok(__Field::__field1),
-                                            _ => _serde::__private228::Ok(__Field::__ignore),
-                                        }
-                                    }
-                                    fn visit_str<__E>(
-                                        self,
-                                        __value: &str,
-                                    ) -> _serde::__private228::Result<Self::Value, __E>
-                                    where
-                                        __E: _serde::de::Error,
-                                    {
-                                        match __value {
-                                            "prompt" => _serde::__private228::Ok(__Field::__field0),
-                                            "images" => _serde::__private228::Ok(__Field::__field1),
-                                            _ => _serde::__private228::Ok(__Field::__ignore),
-                                        }
-                                    }
-                                    fn visit_bytes<__E>(
-                                        self,
-                                        __value: &[u8],
-                                    ) -> _serde::__private228::Result<Self::Value, __E>
-                                    where
-                                        __E: _serde::de::Error,
-                                    {
-                                        match __value {
-                                            b"prompt" => _serde::__private228::Ok(__Field::__field0),
-                                            b"images" => _serde::__private228::Ok(__Field::__field1),
-                                            _ => _serde::__private228::Ok(__Field::__ignore),
-                                        }
-                                    }
-                                }
-                                #[automatically_derived]
-                                impl<'de> _serde::Deserialize<'de> for __Field {
-                                    #[inline]
-                                    fn deserialize<__D>(
-                                        __deserializer: __D,
-                                    ) -> _serde::__private228::Result<Self, __D::Error>
-                                    where
-                                        __D: _serde::Deserializer<'de>,
-                                    {
-                                        _serde::Deserializer::deserialize_identifier(
-                                            __deserializer,
-                                            __FieldVisitor,
-                                        )
-                                    }
-                                }
-                                #[doc(hidden)]
-                                struct __Visitor<'de> {
-                                    marker: _serde::__private228::PhantomData<OllamaRequest>,
-                                    lifetime: _serde::__private228::PhantomData<&'de ()>,
-                                }
-                                #[automatically_derived]
-                                impl<'de> _serde::de::Visitor<'de> for __Visitor<'de> {
-                                    type Value = OllamaRequest;
-                                    fn expecting(
-                                        &self,
-                                        __formatter: &mut _serde::__private228::Formatter,
-                                    ) -> _serde::__private228::fmt::Result {
-                                        _serde::__private228::Formatter::write_str(
-                                            __formatter,
-                                            "struct variant OllamaRequest::ChatCompletion",
-                                        )
-                                    }
-                                    #[inline]
-                                    fn visit_seq<__A>(
-                                        self,
-                                        mut __seq: __A,
-                                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
-                                    where
-                                        __A: _serde::de::SeqAccess<'de>,
-                                    {
-                                        let __field0 = match _serde::de::SeqAccess::next_element::<
-                                            String,
-                                        >(&mut __seq)? {
-                                            _serde::__private228::Some(__value) => __value,
-                                            _serde::__private228::None => {
-                                                return _serde::__private228::Err(
-                                                    _serde::de::Error::invalid_length(
-                                                        0usize,
-                                                        &"struct variant OllamaRequest::ChatCompletion with 2 elements",
-                                                    ),
-                                                );
-                                            }
-                                        };
-                                        let __field1 = match _serde::de::SeqAccess::next_element::<
-                                            Option<Vec<String>>,
-                                        >(&mut __seq)? {
-                                            _serde::__private228::Some(__value) => __value,
-                                            _serde::__private228::None => {
-                                                return _serde::__private228::Err(
-                                                    _serde::de::Error::invalid_length(
-                                                        1usize,
-                                                        &"struct variant OllamaRequest::ChatCompletion with 2 elements",
-                                                    ),
-                                                );
-                                            }
-                                        };
-                                        _serde::__private228::Ok(OllamaRequest::ChatCompletion {
-                                            prompt: __field0,
-                                            images: __field1,
-                                        })
-                                    }
-                                    #[inline]
-                                    fn visit_map<__A>(
-                                        self,
-                                        mut __map: __A,
-                                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
-                                    where
-                                        __A: _serde::de::MapAccess<'de>,
-                                    {
-                                        let mut __field0: _serde::__private228::Option<String> = _serde::__private228::None;
-                                        let mut __field1: _serde::__private228::Option<
-                                            Option<Vec<String>>,
-                                        > = _serde::__private228::None;
-                                        while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
-                                            __Field,
-                                        >(&mut __map)? {
-                                            match __key {
-                                                __Field::__field0 => {
-                                                    if _serde::__private228::Option::is_some(&__field0) {
-                                                        return _serde::__private228::Err(
-                                                            <__A::Error as _serde::de::Error>::duplicate_field("prompt"),
-                                                        );
-                                                    }
-                                                    __field0 = _serde::__private228::Some(
-                                                        _serde::de::MapAccess::next_value::<String>(&mut __map)?,
-                                                    );
-                                                }
-                                                __Field::__field1 => {
-                                                    if _serde::__private228::Option::is_some(&__field1) {
-                                                        return _serde::__private228::Err(
-                                                            <__A::Error as _serde::de::Error>::duplicate_field("images"),
-                                                        );
-                                                    }
-                                                    __field1 = _serde::__private228::Some(
-                                                        _serde::de::MapAccess::next_value::<
-                                                            Option<Vec<String>>,
-                                                        >(&mut __map)?,
-                                                    );
-                                                }
-                                                _ => {
-                                                    let _ = _serde::de::MapAccess::next_value::<
-                                                        _serde::de::IgnoredAny,
-                                                    >(&mut __map)?;
-                                                }
-                                            }
-                                        }
-                                        let __field0 = match __field0 {
-                                            _serde::__private228::Some(__field0) => __field0,
-                                            _serde::__private228::None => {
-                                                _serde::__private228::de::missing_field("prompt")?
-                                            }
-                                        };
-                                        let __field1 = match __field1 {
-                                            _serde::__private228::Some(__field1) => __field1,
-                                            _serde::__private228::None => {
-                                                _serde::__private228::de::missing_field("images")?
-                                            }
-                                        };
-                                        _serde::__private228::Ok(OllamaRequest::ChatCompletion {
-                                            prompt: __field0,
-                                            images: __field1,
-                                        })
-                                    }
-                                }
-                                #[doc(hidden)]
-                                const FIELDS: &'static [&'static str] = &[
-                                    "prompt",
-                                    "images",
-                                ];
-                                _serde::Deserializer::deserialize_any(
-                                    __deserializer,
-                                    __Visitor {
-                                        marker: _serde::__private228::PhantomData::<OllamaRequest>,
-                                        lifetime: _serde::__private228::PhantomData,
-                                    },
-                                )
-                            }
-                        }
-                    }
-                }
-            };
-            pub struct OllamaMsgResp {
-                pub content: String,
-                pub thinking: Option<String>,
-            }
-            #[automatically_derived]
-            impl ::core::fmt::Debug for OllamaMsgResp {
-                #[inline]
-                fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-                    ::core::fmt::Formatter::debug_struct_field2_finish(
-                        f,
-                        "OllamaMsgResp",
-                        "content",
-                        &self.content,
-                        "thinking",
-                        &&self.thinking,
-                    )
-                }
-            }
-            #[doc(hidden)]
-            #[allow(
-                non_upper_case_globals,
-                unused_attributes,
-                unused_qualifications,
-                clippy::absolute_paths,
-            )]
-            const _: () = {
-                #[allow(unused_extern_crates, clippy::useless_attribute)]
-                extern crate serde as _serde;
-                #[automatically_derived]
-                impl _serde::Serialize for OllamaMsgResp {
-                    fn serialize<__S>(
-                        &self,
-                        __serializer: __S,
-                    ) -> _serde::__private228::Result<__S::Ok, __S::Error>
-                    where
-                        __S: _serde::Serializer,
-                    {
-                        let mut __serde_state = _serde::Serializer::serialize_struct(
-                            __serializer,
-                            "OllamaMsgResp",
-                            false as usize + 1 + 1,
-                        )?;
-                        _serde::ser::SerializeStruct::serialize_field(
-                            &mut __serde_state,
-                            "content",
-                            &self.content,
-                        )?;
-                        _serde::ser::SerializeStruct::serialize_field(
-                            &mut __serde_state,
-                            "thinking",
-                            &self.thinking,
-                        )?;
-                        _serde::ser::SerializeStruct::end(__serde_state)
-                    }
-                }
-            };
-            #[doc(hidden)]
-            #[allow(
-                non_upper_case_globals,
-                unused_attributes,
-                unused_qualifications,
-                clippy::absolute_paths,
-            )]
-            const _: () = {
-                #[allow(unused_extern_crates, clippy::useless_attribute)]
-                extern crate serde as _serde;
-                #[automatically_derived]
-                impl<'de> _serde::Deserialize<'de> for OllamaMsgResp {
-                    fn deserialize<__D>(
-                        __deserializer: __D,
-                    ) -> _serde::__private228::Result<Self, __D::Error>
-                    where
-                        __D: _serde::Deserializer<'de>,
-                    {
-                        #[allow(non_camel_case_types)]
-                        #[doc(hidden)]
-                        enum __Field {
-                            __field0,
-                            __field1,
-                            __ignore,
-                        }
-                        #[doc(hidden)]
-                        struct __FieldVisitor;
-                        #[automatically_derived]
-                        impl<'de> _serde::de::Visitor<'de> for __FieldVisitor {
-                            type Value = __Field;
-                            fn expecting(
-                                &self,
-                                __formatter: &mut _serde::__private228::Formatter,
-                            ) -> _serde::__private228::fmt::Result {
-                                _serde::__private228::Formatter::write_str(
-                                    __formatter,
-                                    "field identifier",
-                                )
-                            }
-                            fn visit_u64<__E>(
-                                self,
-                                __value: u64,
-                            ) -> _serde::__private228::Result<Self::Value, __E>
-                            where
-                                __E: _serde::de::Error,
-                            {
-                                match __value {
-                                    0u64 => _serde::__private228::Ok(__Field::__field0),
-                                    1u64 => _serde::__private228::Ok(__Field::__field1),
-                                    _ => _serde::__private228::Ok(__Field::__ignore),
-                                }
-                            }
-                            fn visit_str<__E>(
-                                self,
-                                __value: &str,
-                            ) -> _serde::__private228::Result<Self::Value, __E>
-                            where
-                                __E: _serde::de::Error,
-                            {
-                                match __value {
-                                    "content" => _serde::__private228::Ok(__Field::__field0),
-                                    "thinking" => _serde::__private228::Ok(__Field::__field1),
-                                    _ => _serde::__private228::Ok(__Field::__ignore),
-                                }
-                            }
-                            fn visit_bytes<__E>(
-                                self,
-                                __value: &[u8],
-                            ) -> _serde::__private228::Result<Self::Value, __E>
-                            where
-                                __E: _serde::de::Error,
-                            {
-                                match __value {
-                                    b"content" => _serde::__private228::Ok(__Field::__field0),
-                                    b"thinking" => _serde::__private228::Ok(__Field::__field1),
-                                    _ => _serde::__private228::Ok(__Field::__ignore),
-                                }
-                            }
-                        }
-                        #[automatically_derived]
-                        impl<'de> _serde::Deserialize<'de> for __Field {
-                            #[inline]
-                            fn deserialize<__D>(
-                                __deserializer: __D,
-                            ) -> _serde::__private228::Result<Self, __D::Error>
-                            where
-                                __D: _serde::Deserializer<'de>,
-                            {
-                                _serde::Deserializer::deserialize_identifier(
-                                    __deserializer,
-                                    __FieldVisitor,
-                                )
-                            }
-                        }
-                        #[doc(hidden)]
-                        struct __Visitor<'de> {
-                            marker: _serde::__private228::PhantomData<OllamaMsgResp>,
-                            lifetime: _serde::__private228::PhantomData<&'de ()>,
-                        }
-                        #[automatically_derived]
-                        impl<'de> _serde::de::Visitor<'de> for __Visitor<'de> {
-                            type Value = OllamaMsgResp;
-                            fn expecting(
-                                &self,
-                                __formatter: &mut _serde::__private228::Formatter,
-                            ) -> _serde::__private228::fmt::Result {
-                                _serde::__private228::Formatter::write_str(
-                                    __formatter,
-                                    "struct OllamaMsgResp",
-                                )
-                            }
-                            #[inline]
-                            fn visit_seq<__A>(
-                                self,
-                                mut __seq: __A,
-                            ) -> _serde::__private228::Result<Self::Value, __A::Error>
-                            where
-                                __A: _serde::de::SeqAccess<'de>,
-                            {
-                                let __field0 = match _serde::de::SeqAccess::next_element::<
-                                    String,
-                                >(&mut __seq)? {
-                                    _serde::__private228::Some(__value) => __value,
-                                    _serde::__private228::None => {
-                                        return _serde::__private228::Err(
-                                            _serde::de::Error::invalid_length(
-                                                0usize,
-                                                &"struct OllamaMsgResp with 2 elements",
-                                            ),
-                                        );
-                                    }
-                                };
-                                let __field1 = match _serde::de::SeqAccess::next_element::<
-                                    Option<String>,
-                                >(&mut __seq)? {
-                                    _serde::__private228::Some(__value) => __value,
-                                    _serde::__private228::None => {
-                                        return _serde::__private228::Err(
-                                            _serde::de::Error::invalid_length(
-                                                1usize,
-                                                &"struct OllamaMsgResp with 2 elements",
-                                            ),
-                                        );
-                                    }
-                                };
-                                _serde::__private228::Ok(OllamaMsgResp {
-                                    content: __field0,
-                                    thinking: __field1,
-                                })
-                            }
-                            #[inline]
-                            fn visit_map<__A>(
-                                self,
-                                mut __map: __A,
-                            ) -> _serde::__private228::Result<Self::Value, __A::Error>
-                            where
-                                __A: _serde::de::MapAccess<'de>,
-                            {
-                                let mut __field0: _serde::__private228::Option<String> = _serde::__private228::None;
-                                let mut __field1: _serde::__private228::Option<
-                                    Option<String>,
-                                > = _serde::__private228::None;
-                                while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
-                                    __Field,
-                                >(&mut __map)? {
-                                    match __key {
-                                        __Field::__field0 => {
-                                            if _serde::__private228::Option::is_some(&__field0) {
-                                                return _serde::__private228::Err(
-                                                    <__A::Error as _serde::de::Error>::duplicate_field(
-                                                        "content",
-                                                    ),
-                                                );
-                                            }
-                                            __field0 = _serde::__private228::Some(
-                                                _serde::de::MapAccess::next_value::<String>(&mut __map)?,
-                                            );
-                                        }
-                                        __Field::__field1 => {
-                                            if _serde::__private228::Option::is_some(&__field1) {
-                                                return _serde::__private228::Err(
-                                                    <__A::Error as _serde::de::Error>::duplicate_field(
-                                                        "thinking",
-                                                    ),
-                                                );
-                                            }
-                                            __field1 = _serde::__private228::Some(
-                                                _serde::de::MapAccess::next_value::<
-                                                    Option<String>,
-                                                >(&mut __map)?,
-                                            );
-                                        }
-                                        _ => {
-                                            let _ = _serde::de::MapAccess::next_value::<
-                                                _serde::de::IgnoredAny,
-                                            >(&mut __map)?;
-                                        }
-                                    }
-                                }
-                                let __field0 = match __field0 {
-                                    _serde::__private228::Some(__field0) => __field0,
-                                    _serde::__private228::None => {
-                                        _serde::__private228::de::missing_field("content")?
-                                    }
-                                };
-                                let __field1 = match __field1 {
-                                    _serde::__private228::Some(__field1) => __field1,
-                                    _serde::__private228::None => {
-                                        _serde::__private228::de::missing_field("thinking")?
-                                    }
-                                };
-                                _serde::__private228::Ok(OllamaMsgResp {
-                                    content: __field0,
-                                    thinking: __field1,
-                                })
-                            }
-                        }
-                        #[doc(hidden)]
-                        const FIELDS: &'static [&'static str] = &["content", "thinking"];
-                        _serde::Deserializer::deserialize_struct(
-                            __deserializer,
-                            "OllamaMsgResp",
-                            FIELDS,
-                            __Visitor {
-                                marker: _serde::__private228::PhantomData::<OllamaMsgResp>,
-                                lifetime: _serde::__private228::PhantomData,
-                            },
-                        )
-                    }
-                }
-            };
-        }
-        pub async fn chat(req: HttpRequest, stream: Payload) -> Result<HttpResponse> {
-            let headers = req.headers();
-            let (Some(session), Some(model)) = (
-                headers.get("Authorization"),
-                headers.get("model"),
-            ) else {
-                return Ok(
-                    HttpResponse::Unauthorized()
-                        .body(
-                            "{\"msg\": \"Headers `Authorization`, `model` are necessary\"}",
-                        ),
-                );
-            };
-            let Ok(model) = model.to_str() else {
-                return Ok(
-                    HttpResponse::Unauthorized()
-                        .body("{\"msg\": \"Invalid `model` header\"}"),
-                );
-            };
-            let Ok(session) = session.to_str() else {
-                return Ok(
-                    HttpResponse::Unauthorized()
-                        .body("{\"msg\": \"Invalid `session` header\"}"),
-                );
-            };
-            if let Some(auth) = AUTH.get() && !auth.verify_session(session).await {
-                return Ok(
-                    HttpResponse::Unauthorized()
-                        .body("{\"msg\": \"Invalid SessionToken\"}"),
-                );
-            }
-            let img_capable;
-            if CONFIG.ollama.cvmodels.contains(model) {
-                img_capable = true;
-            } else if CONFIG.ollama.txtmodels.contains(model) {
-                img_capable = false;
-            } else {
-                return Ok(
-                    HttpResponse::NotFound().body("{\"msg\": \"Model not found!\"}"),
-                );
-            }
-            let model = model.to_owned();
-            let (res, mut session, stream) = actix_ws::handle(&req, stream)?;
-            let mut stream = stream
-                .aggregate_continuations()
-                .max_continuation_size(8 * 1024 * 1024);
-            rt::spawn(async move {
-                let mut model = model;
-                let img_capable = img_capable;
-                let mut init = false;
-                let mut history = Vec::with_capacity(*HISTORY_LENGTH);
-                while let Some(msg) = stream.recv().await {
-                    match msg {
-                        Ok(AggregatedMessage::Text(x)) => {
-                            let Ok::<OllamaRequest, _>(x) = serde_json::from_reader(
-                                &*x.into_bytes(),
-                            ) else {
-                                break;
-                            };
-                            model = handle_msg(
-                                    model,
-                                    &mut history,
-                                    img_capable,
-                                    &mut init,
-                                    x,
-                                    &mut session,
-                                    true,
-                                )
-                                .await;
-                        }
-                        Ok(AggregatedMessage::Binary(x)) => {
-                            let Ok::<OllamaRequest, _>(x) = ciborium::from_reader(&*x)
-                            else {
-                                break;
-                            };
-                            model = handle_msg(
-                                    model,
-                                    &mut history,
-                                    img_capable,
-                                    &mut init,
-                                    x,
-                                    &mut session,
-                                    false,
-                                )
-                                .await;
-                        }
-                        Ok(AggregatedMessage::Close(_)) => break,
-                        Ok(AggregatedMessage::Ping(_)) => break,
-                        Ok(AggregatedMessage::Pong(_)) => break,
-                        _ => break,
-                    }
-                    if model.is_empty() {
-                        break;
-                    }
-                }
-                _ = session.close(None).await;
-            });
-            Ok(res)
-        }
-        async fn handle_msg(
-            model: String,
-            history: &mut Vec<ChatMessage>,
-            img_capable: bool,
-            init: &mut bool,
-            msg: OllamaRequest,
-            session: &mut Session,
-            using_json: bool,
-        ) -> String {
-            match handle_msg_faillable(
-                    model,
-                    history,
-                    img_capable,
-                    init,
-                    msg,
-                    session,
-                    using_json,
-                )
-                .await
-            {
-                Some(model) => model,
-                _ => {
-                    if using_json {
-                        _ = session.text(r#"{ "msg": "Internal Server Error" }"#).await;
-                    } else {
-                        _ = session
-                            .text(r#"{ "msg": "Internal Server Error TODO: BSON" }"#)
-                            .await;
-                    }
-                    String::with_capacity(0)
-                }
-            }
-        }
-        async fn handle_msg_faillable(
-            model: String,
-            history: &mut Vec<ChatMessage>,
-            img_capable: bool,
-            init: &mut bool,
-            msg: OllamaRequest,
-            session: &mut Session,
-            using_json: bool,
-        ) -> Option<String> {
-            match msg {
-                OllamaRequest::Init { history: hist } => {
-                    if *init {
-                        if using_json {
-                            _ = session
-                                .text(r#"{ "msg": "Already initialized" }"#)
-                                .await;
-                        } else {
-                            _ = session
-                                .text(r#"{ "msg": "Already initialized TODO: BSON" }"#)
-                                .await;
-                        }
-                        return Some(model);
-                    }
-                    if hist.len() > *HISTORY_LENGTH {
-                        if using_json {
-                            _ = session
-                                .text(r#"{ "msg": "Max History length reached" }"#)
-                                .await;
-                        } else {
-                            _ = session
-                                .text(
-                                    r#"{ "msg": "Max History length reached TODO: BSON" }"#,
-                                )
-                                .await;
-                        }
-                        return Some(model);
-                    }
-                    *init = true;
-                    history
-                        .extend(
-                            hist
-                                .into_iter()
-                                .map(|x| match x {
-                                    Message::User { message, images } => {
-                                        let mut msg = ChatMessage::new(MessageRole::User, message);
-                                        if let Some(images) = images {
-                                            msg = msg
-                                                .with_images(
-                                                    images
-                                                        .into_iter()
-                                                        .map(Image::from_base64)
-                                                        .collect::<Vec<_>>(),
-                                                );
-                                        }
-                                        msg
-                                    }
-                                    Message::System { prompt } => {
-                                        ChatMessage::new(MessageRole::System, prompt)
-                                    }
-                                    Message::Assistant { message, thinking } => {
-                                        let mut msg = ChatMessage::new(
-                                            MessageRole::Assistant,
-                                            message,
-                                        );
-                                        msg.thinking = thinking;
-                                        msg
-                                    }
-                                }),
-                        );
-                    Some(model)
-                }
-                OllamaRequest::ChatCompletion { prompt, images } => {
-                    if !*init {
-                        if using_json {
-                            _ = session
-                                .text(r#"{ "msg": "Initialization Required" }"#)
-                                .await;
-                        } else {
-                            _ = session
-                                .text(r#"{ "msg": "Initialization Required TODO: BSON" }"#)
-                                .await;
-                        }
-                        return Some(model);
-                    }
-                    if history.len() > *HISTORY_LENGTH {
-                        if using_json {
-                            _ = session
-                                .text(r#"{ "msg": "Maximum message length reached!" }"#)
-                                .await;
-                        } else {
-                            _ = session
-                                .text(
-                                    r#"{ "msg": "Maximum message length reached TODO: BSON!" }"#,
-                                )
-                                .await;
-                        }
-                        return None;
-                    }
-                    let mut message = ChatMessage::user(prompt);
-                    if let Some(images) = images {
-                        if !img_capable {
-                            if using_json {
-                                _ = session
-                                    .text(r#"{ "msg": "The model is not image capable" }"#)
-                                    .await;
-                            } else {
-                                _ = session
-                                    .text(
-                                        r#"{ "msg": "The model is not image capable (TODO: BSON)" }"#,
-                                    )
-                                    .await;
-                            }
-                            return None;
-                        }
-                        message = message
-                            .with_images(
-                                images
-                                    .into_iter()
-                                    .map(Image::from_base64)
-                                    .collect::<Vec<_>>(),
-                            );
-                    }
-                    let resp = OLLAMA
-                        .send_chat_messages_with_history(
-                            history,
-                            ChatMessageRequest::new(
-                                model,
-                                <[_]>::into_vec(::alloc::boxed::box_new([message])),
-                            ),
-                        )
-                        .await
-                        .ok()?;
-                    let out = OllamaMsgResp {
-                        content: resp.message.content,
-                        thinking: resp.message.thinking,
-                    };
-                    if using_json {
-                        _ = session.text(serde_json::to_string(&out).ok()?).await;
-                    } else {
-                        let mut bytes = ::alloc::vec::Vec::new();
-                        ciborium::into_writer(&out, &mut bytes).ok()?;
-                        _ = session.binary(bytes).await;
-                    }
-                    Some(resp.model)
-                }
-            }
-        }
-    }
     pub mod http {
         use actix_web::{
             HttpResponse, Responder, Result, get, http::header::ContentType, post,
@@ -3956,7 +1962,7 @@ mod server {
         };
         use crate::{auth::AGENT, server::{AUTH, http::structs::ROOT_RESPONSE_DATA}};
         pub mod structs {
-            use std::sync::LazyLock;
+            use std::{collections::HashMap, sync::LazyLock};
             use serde::Serialize;
             use crate::{server::CONFIG, structs::Authentication};
             pub enum ShowedAuth {
@@ -4012,8 +2018,7 @@ mod server {
                 version: &'static str,
                 auth: ShowedAuth,
                 can_register: bool,
-                vision_models: Vec<&'static str>,
-                text_models: Vec<&'static str>,
+                models: HashMap<Box<str>, u16>,
             }
             #[doc(hidden)]
             #[allow(
@@ -4037,7 +2042,7 @@ mod server {
                         let mut __serde_state = _serde::Serializer::serialize_struct(
                             __serializer,
                             "RootResponse",
-                            false as usize + 1 + 1 + 1 + 1 + 1,
+                            false as usize + 1 + 1 + 1 + 1,
                         )?;
                         _serde::ser::SerializeStruct::serialize_field(
                             &mut __serde_state,
@@ -4056,13 +2061,8 @@ mod server {
                         )?;
                         _serde::ser::SerializeStruct::serialize_field(
                             &mut __serde_state,
-                            "vision_models",
-                            &self.vision_models,
-                        )?;
-                        _serde::ser::SerializeStruct::serialize_field(
-                            &mut __serde_state,
-                            "text_models",
-                            &self.text_models,
+                            "models",
+                            &self.models,
                         )?;
                         _serde::ser::SerializeStruct::end(__serde_state)
                     }
@@ -4071,11 +2071,10 @@ mod server {
             impl RootResponse {
                 pub fn new() -> Self {
                     let mut out = Self {
-                        version: "0.1.3",
+                        version: "0.3.2",
                         auth: ShowedAuth::OpenToAll,
                         can_register: false,
-                        text_models: ::alloc::vec::Vec::new(),
-                        vision_models: ::alloc::vec::Vec::new(),
+                        models: HashMap::new(),
                     };
                     match CONFIG.authentication {
                         Authentication::Account { registration_allowed, .. } => {
@@ -4086,21 +2085,12 @@ mod server {
                             out.auth = ShowedAuth::OpenToAll;
                         }
                     }
-                    out.text_models.reserve(CONFIG.ollama.txtmodels.len());
-                    out.vision_models.reserve(CONFIG.ollama.cvmodels.len());
                     CONFIG
-                        .ollama
-                        .cvmodels
+                        .llama
+                        .models
                         .iter()
-                        .for_each(|x| {
-                            out.vision_models.push(x as &str);
-                        });
-                    CONFIG
-                        .ollama
-                        .txtmodels
-                        .iter()
-                        .for_each(|x| {
-                            out.text_models.push(x as &str);
+                        .for_each(|(key, value)| {
+                            _ = out.models.insert(key.to_owned(), value.capabilities.0);
                         });
                     out
                 }
@@ -4182,31 +2172,89 @@ mod server {
             }
         }
     }
+    pub mod llama {}
     pub mod ffi {}
     pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
         let data = stdfs::read_to_string("config.json").expect("Unable to load config");
         from_str(&data).expect("Invalid configuration file, unable to parse")
     });
-    pub static DBCONF: LazyLock<DatabaseConfig> = LazyLock::new(|| DatabaseConfig::get());
-    pub static HISTORY_LENGTH: LazyLock<usize> = LazyLock::new(|| {
-        CONFIG.ollama.msgs.saturating_mul(2)
-    });
+    pub static DECRYPTED_CONFIG: LazyLock<RwLock<Config>> = LazyLock::new(|| decrypt_config());
     pub static AUTH: OnceLock<AuthSessionManager> = OnceLock::new();
-    pub static REAL_ADMIN_PASSWORD: OnceLock<SecretString> = OnceLock::new();
-    pub static OLLAMA: LazyLock<Ollama> = LazyLock::new(|| Ollama::new(
-        CONFIG.ollama.host.as_ref(),
-        CONFIG.ollama.port,
-    ));
+    pub static REAL_ADMIN_PASSWORD: OnceLock<RwLock<SecretString>> = OnceLock::new();
+    fn decrypt_config() -> RwLock<Config> {
+        if let Some(pass) = REAL_ADMIN_PASSWORD.get() {
+            let mut conf = CONFIG.clone();
+            let conf = thread::spawn(move || {
+                    argon::decrypt_config(
+                        pass.blocking_read().expose_secret(),
+                        &mut conf,
+                    );
+                    conf
+                })
+                .join()
+                .expect("Unable to decrypt config");
+            {
+                {
+                    let lvl = ::log::Level::Info;
+                    if lvl <= ::log::STATIC_MAX_LEVEL && lvl <= ::log::max_level() {
+                        ::log::__private_api::log(
+                            { ::log::__private_api::GlobalLogger },
+                            format_args!("Successfully decrypted configuration"),
+                            lvl,
+                            &(
+                                "ahqai_server::server",
+                                "ahqai_server::server",
+                                ::log::__private_api::loc(),
+                            ),
+                            (),
+                        );
+                    }
+                }
+            };
+            return RwLock::new(conf);
+        }
+        {
+            {
+                let lvl = ::log::Level::Warn;
+                if lvl <= ::log::STATIC_MAX_LEVEL && lvl <= ::log::max_level() {
+                    ::log::__private_api::log(
+                        { ::log::__private_api::GlobalLogger },
+                        format_args!(
+                            "No Server Administrator Password found to perform decryption, double check if this is a bug. If it is, create an issue immediately at https://github.com/ahq-softwares/ahq-ai/issues",
+                        ),
+                        lvl,
+                        &(
+                            "ahqai_server::server",
+                            "ahqai_server::server",
+                            ::log::__private_api::loc(),
+                        ),
+                        (),
+                    );
+                }
+            }
+        };
+        RwLock::new(CONFIG.clone())
+    }
     pub fn launch() -> Chalk {
         let mut chalk = Chalk::new();
-        chalk
-            .blue()
-            .bold()
-            .println(
-                &::alloc::__export::must_use({
-                    ::alloc::fmt::format(format_args!("AHQ-AI Server v{0}", "0.1.3"))
-                }),
-            );
+        {
+            {
+                let lvl = ::log::Level::Info;
+                if lvl <= ::log::STATIC_MAX_LEVEL && lvl <= ::log::max_level() {
+                    ::log::__private_api::log(
+                        { ::log::__private_api::GlobalLogger },
+                        format_args!("AHQ-AI Server v{0}", "0.3.2"),
+                        lvl,
+                        &(
+                            "ahqai_server::server",
+                            "ahqai_server::server",
+                            ::log::__private_api::loc(),
+                        ),
+                        (),
+                    );
+                }
+            }
+        };
         chalk.reset_style();
         chalk
     }
@@ -4215,6 +2263,48 @@ mod server {
             .block_on(async move {
                 {
                     let mut chalk = launch();
+                    let admin_api = request_admin_passwd();
+                    {
+                        {
+                            let lvl = ::log::Level::Info;
+                            if lvl <= ::log::STATIC_MAX_LEVEL
+                                && lvl <= ::log::max_level()
+                            {
+                                ::log::__private_api::log(
+                                    { ::log::__private_api::GlobalLogger },
+                                    format_args!("Decrypting configuration..."),
+                                    lvl,
+                                    &(
+                                        "ahqai_server::server",
+                                        "ahqai_server::server",
+                                        ::log::__private_api::loc(),
+                                    ),
+                                    (),
+                                );
+                            }
+                        }
+                    };
+                    _ = DECRYPTED_CONFIG.read().await;
+                    {
+                        {
+                            let lvl = ::log::Level::Info;
+                            if lvl <= ::log::STATIC_MAX_LEVEL
+                                && lvl <= ::log::max_level()
+                            {
+                                ::log::__private_api::log(
+                                    { ::log::__private_api::GlobalLogger },
+                                    format_args!("Decryption successful..."),
+                                    lvl,
+                                    &(
+                                        "ahqai_server::server",
+                                        "ahqai_server::server",
+                                        ::log::__private_api::loc(),
+                                    ),
+                                    (),
+                                );
+                            }
+                        }
+                    };
                     let auth = !#[allow(non_exhaustive_omitted_patterns)]
                     match CONFIG.authentication {
                         Authentication::OpenToAll => true,
@@ -4222,6 +2312,28 @@ mod server {
                     };
                     let mut registration_api = false;
                     if auth {
+                        {
+                            {
+                                let lvl = ::log::Level::Info;
+                                if lvl <= ::log::STATIC_MAX_LEVEL
+                                    && lvl <= ::log::max_level()
+                                {
+                                    ::log::__private_api::log(
+                                        { ::log::__private_api::GlobalLogger },
+                                        format_args!(
+                                            "Starting up authentication manager using the decrypted configuration.",
+                                        ),
+                                        lvl,
+                                        &(
+                                            "ahqai_server::server",
+                                            "ahqai_server::server",
+                                            ::log::__private_api::loc(),
+                                        ),
+                                        (),
+                                    );
+                                }
+                            }
+                        };
                         if let Authentication::Account { registration_allowed, .. } = &CONFIG
                             .authentication
                         {
@@ -4229,24 +2341,9 @@ mod server {
                         }
                         _ = AUTH.set(AuthSessionManager::create().await);
                     }
-                    if OLLAMA.list_local_models().await.is_err() {
-                        {
-                            ::std::io::_print(format_args!("----------------\n"));
-                        };
-                        chalk
-                            .red()
-                            .println(
-                                &"Connection to ollama failed. Are you sure configuration is correct?",
-                            );
-                        {
-                            ::std::io::_print(format_args!("----------------\n"));
-                        };
-                    }
-                    let admin_api = request_admin_passwd();
                     let mut server = HttpServer::new(move || {
                             let mut app = App::new()
                                 .service(http::index)
-                                .route("/chat", web::get().to(chat::chat))
                                 .service(http::challenge)
                                 .service(http::me);
                             let auth = !#[allow(non_exhaustive_omitted_patterns)]
@@ -4272,60 +2369,187 @@ mod server {
                         })
                         .workers(available_parallelism()?.get());
                     for (host, port) in &CONFIG.binds {
-                        chalk
-                            .blue()
-                            .println(
-                                &::alloc::__export::must_use({
-                                    ::alloc::fmt::format(
+                        {
+                            {
+                                let lvl = ::log::Level::Info;
+                                if lvl <= ::log::STATIC_MAX_LEVEL
+                                    && lvl <= ::log::max_level()
+                                {
+                                    ::log::__private_api::log(
+                                        { ::log::__private_api::GlobalLogger },
                                         format_args!("Binding to {0}:{1}", host, port),
-                                    )
-                                }),
-                            );
+                                        lvl,
+                                        &(
+                                            "ahqai_server::server",
+                                            "ahqai_server::server",
+                                            ::log::__private_api::loc(),
+                                        ),
+                                        (),
+                                    );
+                                }
+                            }
+                        };
                         server = server.bind((host as &str, *port))?;
                     }
                     {
-                        ::std::io::_print(format_args!("----------------\n"));
-                    };
-                    chalk.blue().println(&"Server is starting!");
-                    {
-                        ::std::io::_print(format_args!("----------------\n"));
-                    };
-                    {
-                        ::std::io::_print(format_args!("\n"));
+                        {
+                            let lvl = ::log::Level::Info;
+                            if lvl <= ::log::STATIC_MAX_LEVEL
+                                && lvl <= ::log::max_level()
+                            {
+                                ::log::__private_api::log(
+                                    { ::log::__private_api::GlobalLogger },
+                                    format_args!("Server is starting"),
+                                    lvl,
+                                    &(
+                                        "ahqai_server::server",
+                                        "ahqai_server::server",
+                                        ::log::__private_api::loc(),
+                                    ),
+                                    (),
+                                );
+                            }
+                        }
                     };
                     let out = server.run().await;
                     if let Err(e) = &out {
                         {
-                            ::std::io::_print(format_args!("----------------\n"));
+                            {
+                                let lvl = ::log::Level::Error;
+                                if lvl <= ::log::STATIC_MAX_LEVEL
+                                    && lvl <= ::log::max_level()
+                                {
+                                    ::log::__private_api::log(
+                                        { ::log::__private_api::GlobalLogger },
+                                        format_args!("Server exited in an error state."),
+                                        lvl,
+                                        &(
+                                            "ahqai_server::server",
+                                            "ahqai_server::server",
+                                            ::log::__private_api::loc(),
+                                        ),
+                                        (),
+                                    );
+                                }
+                            }
                         };
-                        chalk.red().bold().println(&"Server Exited in an error state");
                         {
-                            ::std::io::_print(format_args!("{0}\n", e));
+                            {
+                                let lvl = ::log::Level::Error;
+                                if lvl <= ::log::STATIC_MAX_LEVEL
+                                    && lvl <= ::log::max_level()
+                                {
+                                    ::log::__private_api::log(
+                                        { ::log::__private_api::GlobalLogger },
+                                        format_args!("{0}", e),
+                                        lvl,
+                                        &(
+                                            "ahqai_server::server",
+                                            "ahqai_server::server",
+                                            ::log::__private_api::loc(),
+                                        ),
+                                        (),
+                                    );
+                                }
+                            }
                         };
                     }
                     {
-                        ::std::io::_print(format_args!("----------------\n"));
+                        {
+                            let lvl = ::log::Level::Info;
+                            if lvl <= ::log::STATIC_MAX_LEVEL
+                                && lvl <= ::log::max_level()
+                            {
+                                ::log::__private_api::log(
+                                    { ::log::__private_api::GlobalLogger },
+                                    format_args!(
+                                        "Zeroizing the decrypted configuration and server administrator key",
+                                    ),
+                                    lvl,
+                                    &(
+                                        "ahqai_server::server",
+                                        "ahqai_server::server",
+                                        ::log::__private_api::loc(),
+                                    ),
+                                    (),
+                                );
+                            }
+                        }
                     };
-                    chalk
-                        .reset_style()
-                        .blue()
-                        .bold()
-                        .println(
-                            &"Starting shutdown procedure. Saving server state to disk... This might take a while",
-                        );
-                    chalk
-                        .red()
-                        .bold()
-                        .println(
-                            &"Please DO NOT use Ctrl+C to terminate. It will lead to data corruption!",
-                        );
-                    chalk
-                        .reset_style()
-                        .blue()
-                        .bold()
-                        .println(
-                            &"Server state has been successfully set! Closing server. Session tokens will be discarded.",
-                        );
+                    DECRYPTED_CONFIG.write().await.zeroize();
+                    if let Some(x) = REAL_ADMIN_PASSWORD.get() {
+                        x.write().await.zeroize();
+                    }
+                    {
+                        {
+                            let lvl = ::log::Level::Info;
+                            if lvl <= ::log::STATIC_MAX_LEVEL
+                                && lvl <= ::log::max_level()
+                            {
+                                ::log::__private_api::log(
+                                    { ::log::__private_api::GlobalLogger },
+                                    format_args!("Zeroized successfully"),
+                                    lvl,
+                                    &(
+                                        "ahqai_server::server",
+                                        "ahqai_server::server",
+                                        ::log::__private_api::loc(),
+                                    ),
+                                    (),
+                                );
+                            }
+                        }
+                    };
+                    {
+                        {
+                            let lvl = ::log::Level::Warn;
+                            if lvl <= ::log::STATIC_MAX_LEVEL
+                                && lvl <= ::log::max_level()
+                            {
+                                ::log::__private_api::log(
+                                    { ::log::__private_api::GlobalLogger },
+                                    format_args!(
+                                        "Ctrl+C detected (most probably). Starting shutdown procedure. This might take a while.",
+                                    ),
+                                    lvl,
+                                    &(
+                                        "ahqai_server::server",
+                                        "ahqai_server::server",
+                                        ::log::__private_api::loc(),
+                                    ),
+                                    (),
+                                );
+                            }
+                        }
+                    };
+                    {
+                        {
+                            let lvl = ::log::Level::Info;
+                            if lvl <= ::log::STATIC_MAX_LEVEL
+                                && lvl <= ::log::max_level()
+                            {
+                                ::log::__private_api::log(
+                                    { ::log::__private_api::GlobalLogger },
+                                    format_args!(
+                                        "{0}",
+                                        chalk
+                                            .red()
+                                            .bold()
+                                            .string(
+                                                &"Please DO NOT use Ctrl+C to terminate. It will lead to data corruption!",
+                                            ),
+                                    ),
+                                    lvl,
+                                    &(
+                                        "ahqai_server::server",
+                                        "ahqai_server::server",
+                                        ::log::__private_api::loc(),
+                                    ),
+                                    (),
+                                );
+                            }
+                        }
+                    };
                     out
                 }
             })
@@ -4338,41 +2562,125 @@ mod server {
                 passwd = x;
             } else {
                 {
-                    ::std::io::_print(format_args!("----------------\n"));
+                    {
+                        let lvl = ::log::Level::Warn;
+                        if lvl <= ::log::STATIC_MAX_LEVEL && lvl <= ::log::max_level() {
+                            ::log::__private_api::log(
+                                { ::log::__private_api::GlobalLogger },
+                                format_args!("----------------"),
+                                lvl,
+                                &(
+                                    "ahqai_server::server",
+                                    "ahqai_server::server",
+                                    ::log::__private_api::loc(),
+                                ),
+                                (),
+                            );
+                        }
+                    }
                 };
                 {
-                    ::std::io::_print(
-                        format_args!(
-                            "THE GIVEN SERVER IS PROTECTED BY SERVER ADMIN PASSWORD\n",
-                        ),
-                    );
+                    {
+                        let lvl = ::log::Level::Warn;
+                        if lvl <= ::log::STATIC_MAX_LEVEL && lvl <= ::log::max_level() {
+                            ::log::__private_api::log(
+                                { ::log::__private_api::GlobalLogger },
+                                format_args!(
+                                    "THE GIVEN SERVER IS PROTECTED BY SERVER ADMIN PASSWORD",
+                                ),
+                                lvl,
+                                &(
+                                    "ahqai_server::server",
+                                    "ahqai_server::server",
+                                    ::log::__private_api::loc(),
+                                ),
+                                (),
+                            );
+                        }
+                    }
                 };
                 {
-                    ::std::io::_print(
-                        format_args!(
-                            "BUT THE `AHQAI_ADMIN_PASSWORD` VARIABLE WAS NOT FOUND\n",
-                        ),
-                    );
+                    {
+                        let lvl = ::log::Level::Warn;
+                        if lvl <= ::log::STATIC_MAX_LEVEL && lvl <= ::log::max_level() {
+                            ::log::__private_api::log(
+                                { ::log::__private_api::GlobalLogger },
+                                format_args!(
+                                    "BUT THE `AHQAI_ADMIN_PASSWORD` VARIABLE WAS NOT FOUND",
+                                ),
+                                lvl,
+                                &(
+                                    "ahqai_server::server",
+                                    "ahqai_server::server",
+                                    ::log::__private_api::loc(),
+                                ),
+                                (),
+                            );
+                        }
+                    }
                 };
                 {
-                    ::std::io::_print(
-                        format_args!(
-                            "IN THE CURRENT SERVER ENVIRONMENT. REQUESTING MANUAL ENTRY\n",
-                        ),
-                    );
+                    {
+                        let lvl = ::log::Level::Warn;
+                        if lvl <= ::log::STATIC_MAX_LEVEL && lvl <= ::log::max_level() {
+                            ::log::__private_api::log(
+                                { ::log::__private_api::GlobalLogger },
+                                format_args!(
+                                    "IN THE CURRENT SERVER ENVIRONMENT. REQUESTING MANUAL ENTRY",
+                                ),
+                                lvl,
+                                &(
+                                    "ahqai_server::server",
+                                    "ahqai_server::server",
+                                    ::log::__private_api::loc(),
+                                ),
+                                (),
+                            );
+                        }
+                    }
                 };
                 {
-                    ::std::io::_print(format_args!("----------------\n"));
+                    {
+                        let lvl = ::log::Level::Warn;
+                        if lvl <= ::log::STATIC_MAX_LEVEL && lvl <= ::log::max_level() {
+                            ::log::__private_api::log(
+                                { ::log::__private_api::GlobalLogger },
+                                format_args!("----------------"),
+                                lvl,
+                                &(
+                                    "ahqai_server::server",
+                                    "ahqai_server::server",
+                                    ::log::__private_api::loc(),
+                                ),
+                                (),
+                            );
+                        }
+                    }
                 };
                 {
-                    ::std::io::_print(format_args!("\n"));
+                    {
+                        let lvl = ::log::Level::Warn;
+                        if lvl <= ::log::STATIC_MAX_LEVEL && lvl <= ::log::max_level() {
+                            ::log::__private_api::log(
+                                { ::log::__private_api::GlobalLogger },
+                                format_args!(""),
+                                lvl,
+                                &(
+                                    "ahqai_server::server",
+                                    "ahqai_server::server",
+                                    ::log::__private_api::loc(),
+                                ),
+                                (),
+                            );
+                        }
+                    }
                 };
                 passwd = rpassword::prompt_password(
                         "Enter your administrator password : ",
                     )
                     .expect("Unable to read your password");
             }
-            if !verify(&passwd, hash).unwrap_or(false) {
+            if !verify_server_pass(&passwd, hash).unwrap_or(false) {
                 {
                     ::core::panicking::panic_fmt(
                         format_args!("Invalid Password was provided"),
@@ -4380,27 +2688,115 @@ mod server {
                 }
             }
             {
-                ::std::io::_print(format_args!("\n"));
+                {
+                    let lvl = ::log::Level::Info;
+                    if lvl <= ::log::STATIC_MAX_LEVEL && lvl <= ::log::max_level() {
+                        ::log::__private_api::log(
+                            { ::log::__private_api::GlobalLogger },
+                            format_args!(""),
+                            lvl,
+                            &(
+                                "ahqai_server::server",
+                                "ahqai_server::server",
+                                ::log::__private_api::loc(),
+                            ),
+                            (),
+                        );
+                    }
+                }
             };
             {
-                ::std::io::_print(format_args!("----------------\n"));
+                {
+                    let lvl = ::log::Level::Info;
+                    if lvl <= ::log::STATIC_MAX_LEVEL && lvl <= ::log::max_level() {
+                        ::log::__private_api::log(
+                            { ::log::__private_api::GlobalLogger },
+                            format_args!("----------------"),
+                            lvl,
+                            &(
+                                "ahqai_server::server",
+                                "ahqai_server::server",
+                                ::log::__private_api::loc(),
+                            ),
+                            (),
+                        );
+                    }
+                }
             };
             {
-                ::std::io::_print(
-                    format_args!("SERVER ADMIN PASSWORD AUTH SUCCESSFUL\n"),
-                );
+                {
+                    let lvl = ::log::Level::Info;
+                    if lvl <= ::log::STATIC_MAX_LEVEL && lvl <= ::log::max_level() {
+                        ::log::__private_api::log(
+                            { ::log::__private_api::GlobalLogger },
+                            format_args!("SERVER ADMIN PASSWORD AUTH SUCCESSFUL"),
+                            lvl,
+                            &(
+                                "ahqai_server::server",
+                                "ahqai_server::server",
+                                ::log::__private_api::loc(),
+                            ),
+                            (),
+                        );
+                    }
+                }
             };
             {
-                ::std::io::_print(format_args!("SERVER WILL START UP NOW\n"));
+                {
+                    let lvl = ::log::Level::Info;
+                    if lvl <= ::log::STATIC_MAX_LEVEL && lvl <= ::log::max_level() {
+                        ::log::__private_api::log(
+                            { ::log::__private_api::GlobalLogger },
+                            format_args!("SERVER WILL START UP NOW"),
+                            lvl,
+                            &(
+                                "ahqai_server::server",
+                                "ahqai_server::server",
+                                ::log::__private_api::loc(),
+                            ),
+                            (),
+                        );
+                    }
+                }
             };
             {
-                ::std::io::_print(format_args!("----------------\n"));
+                {
+                    let lvl = ::log::Level::Info;
+                    if lvl <= ::log::STATIC_MAX_LEVEL && lvl <= ::log::max_level() {
+                        ::log::__private_api::log(
+                            { ::log::__private_api::GlobalLogger },
+                            format_args!("----------------"),
+                            lvl,
+                            &(
+                                "ahqai_server::server",
+                                "ahqai_server::server",
+                                ::log::__private_api::loc(),
+                            ),
+                            (),
+                        );
+                    }
+                }
             };
             {
-                ::std::io::_print(format_args!("\n"));
+                {
+                    let lvl = ::log::Level::Info;
+                    if lvl <= ::log::STATIC_MAX_LEVEL && lvl <= ::log::max_level() {
+                        ::log::__private_api::log(
+                            { ::log::__private_api::GlobalLogger },
+                            format_args!(""),
+                            lvl,
+                            &(
+                                "ahqai_server::server",
+                                "ahqai_server::server",
+                                ::log::__private_api::loc(),
+                            ),
+                            (),
+                        );
+                    }
+                }
             };
             REAL_ADMIN_PASSWORD
-                .set(SecretString::from(passwd))
+                .set(RwLock::new(SecretString::from(passwd)))
                 .expect("Impossible Error");
             return true;
         }
@@ -4423,7 +2819,10 @@ mod ui {
     use cursive_tabs::TabPanel;
     use serde_json::to_string_pretty;
     use tokio::runtime::{Builder, Runtime};
-    use crate::structs::{Authentication, BCRYPT_COST, Config};
+    use crate::{
+        auth::argon::{migrate_config, server::{hash_server_pass, verify_server_pass}},
+        structs::{Authentication, Config},
+    };
     mod auth {
         use cursive::{
             Cursive, view::Nameable, views::{LinearLayout, NamedView, ScrollView},
@@ -4462,17 +2861,25 @@ mod ui {
             use cursive::{
                 align::Align, theme::{Effect, Style},
                 view::{Nameable, Resizable},
-                views::{Button, Dialog, DummyView, LinearLayout, SelectView, TextView},
+                views::{
+                    Button, Dialog, DummyView, EditView, LinearLayout, SelectView,
+                    TextView,
+                },
             };
             use crate::{
                 structs::{Authentication, Config},
                 ui::Ptr,
             };
-            pub fn render(l: &mut LinearLayout, can_register: bool) {
+            pub fn render(
+                l: &mut LinearLayout,
+                can_register: bool,
+                memory: u32,
+                time: u32,
+            ) {
                 l.add_child(
                     LinearLayout::horizontal()
                         .child(TextView::new("⚒ Authentication Type").full_width())
-                        .child(Button::new_raw("Token (TokenBased)", |_| {})),
+                        .child(Button::new_raw("Account Authentication", |_| {})),
                 );
                 l.add_child(
                     LinearLayout::horizontal()
@@ -4514,14 +2921,140 @@ mod ui {
                                 .with_name("user_reg_allowed"),
                         ),
                 );
+                l.add_child(DummyView::new().fixed_height(2));
+                l.add_child(
+                    TextView::new("⚒ Argon2")
+                        .style(Style::merge(&[Effect::Underline.into()])),
+                );
                 l.add_child(
                     LinearLayout::horizontal()
-                        .child(TextView::new("⚒ Account Manager").full_width())
-                        .child(Button::new_raw("Use Admin API ↗", |_| {})),
+                        .child(TextView::new("⚒ Argon2 Memory Cost").full_width())
+                        .child(
+                            Button::new_raw(
+                                    ::alloc::__export::must_use({
+                                        ::alloc::fmt::format(format_args!("[{0} MiB]", memory))
+                                    }),
+                                    |x| {
+                                        x.add_layer(
+                                            Dialog::around(
+                                                    EditView::new()
+                                                        .on_edit(|x, val, _| {
+                                                            let state: &mut Ptr<Config> = x.user_data().unwrap();
+                                                            if let Ok(num) = val.parse::<u32>() {
+                                                                if num > 0 {
+                                                                    let Authentication::Account { max_memory, .. } = &mut state
+                                                                        .authentication else {
+                                                                        ::core::panicking::panic(
+                                                                            "internal error: entered unreachable code",
+                                                                        )
+                                                                    };
+                                                                    *max_memory = num;
+                                                                    x.call_on_name(
+                                                                        "ram_usage",
+                                                                        move |x: &mut Button| {
+                                                                            x.set_label_raw(
+                                                                                ::alloc::__export::must_use({
+                                                                                    ::alloc::fmt::format(format_args!("[{0} MiB]", num))
+                                                                                }),
+                                                                            );
+                                                                        },
+                                                                    );
+                                                                }
+                                                            }
+                                                        })
+                                                        .on_submit(|x, _| {
+                                                            x.pop_layer();
+                                                        }),
+                                                )
+                                                .dismiss_button("Done")
+                                                .title("Memory Cost"),
+                                        );
+                                    },
+                                )
+                                .with_name("ram_usage"),
+                        ),
+                );
+                l.add_child(
+                    LinearLayout::horizontal()
+                        .child(
+                            TextView::new("⚒ Argon2 Time Cost (Total Rounds)")
+                                .full_width(),
+                        )
+                        .child(
+                            Button::new_raw(
+                                    ::alloc::__export::must_use({
+                                        ::alloc::fmt::format(format_args!("<{0}>", time))
+                                    }),
+                                    |x| {
+                                        x.add_layer(
+                                            Dialog::around(
+                                                    EditView::new()
+                                                        .on_edit(|x, val, _| {
+                                                            let state: &mut Ptr<Config> = x.user_data().unwrap();
+                                                            if let Ok(num) = val.parse::<u32>() {
+                                                                if num > 0 {
+                                                                    let Authentication::Account { time_cost, .. } = &mut state
+                                                                        .authentication else {
+                                                                        ::core::panicking::panic(
+                                                                            "internal error: entered unreachable code",
+                                                                        )
+                                                                    };
+                                                                    *time_cost = num;
+                                                                    x.call_on_name(
+                                                                        "time",
+                                                                        move |x: &mut Button| {
+                                                                            x.set_label_raw(
+                                                                                ::alloc::__export::must_use({
+                                                                                    ::alloc::fmt::format(format_args!("<{0}>", num))
+                                                                                }),
+                                                                            );
+                                                                        },
+                                                                    );
+                                                                }
+                                                            }
+                                                        })
+                                                        .on_submit(|x, _| {
+                                                            x.pop_layer();
+                                                        }),
+                                                )
+                                                .dismiss_button("Done")
+                                                .title("Time Cost"),
+                                        );
+                                    },
+                                )
+                                .with_name("time"),
+                        ),
                 );
                 l.add_child(DummyView::new().fixed_height(2));
                 l.add_child(
-                    TextView::new("User Auth")
+                    TextView::new("Miscellaneous")
+                        .style(Style::merge(&[Effect::Underline.into()])),
+                );
+                l.add_child(
+                    LinearLayout::horizontal()
+                        .child(TextView::new("⚒ Account Manager").full_width())
+                        .child(
+                            Button::new_raw(
+                                "Use the admin binary ↗",
+                                |x| {
+                                    x.add_layer(
+                                        Dialog::around(
+                                                TextView::new(
+                                                    "AHQ AI team provides a dedicated cli application to manage server users (accounts and tokens) for the whole AHQ AI server. You should look into that. Also, you may review the source code to obtain the api endpoints to manage these.",
+                                                ),
+                                            )
+                                            .title("Server Administrator Portal")
+                                            .dismiss_button("Ok")
+                                            .min_width(32)
+                                            .max_width(64),
+                                    );
+                                },
+                            ),
+                        ),
+                );
+                l.add_child(DummyView::new().fixed_height(2));
+                l.add_child(
+                    TextView::new("About User Auth")
                         .align(Align::center())
                         .style(
                             Style::merge(&[Effect::Dim.into(), Effect::Underline.into()]),
@@ -4559,8 +3092,17 @@ mod ui {
                                     layout.clear();
                                     match auth {
                                         Authentication::OpenToAll => open::render(layout),
-                                        Authentication::Account { registration_allowed } => {
-                                            user::render(layout, registration_allowed)
+                                        Authentication::Account {
+                                            registration_allowed,
+                                            max_memory,
+                                            time_cost,
+                                        } => {
+                                            user::render(
+                                                layout,
+                                                registration_allowed,
+                                                max_memory,
+                                                time_cost,
+                                            )
                                         }
                                     }
                                 },
@@ -4726,55 +3268,883 @@ mod ui {
                 )
         }
     }
-    mod ollama {
+    mod dbconf {
         use cursive::{
-            theme::{Effect, Style},
+            Cursive, View, align::HAlign, theme::{Effect, Style},
             view::{Nameable, Resizable},
             views::{
                 Button, Dialog, DummyView, EditView, LinearLayout, NamedView, ScrollView,
                 TextView,
             },
         };
-        use crate::{structs::Config, ui::Ptr};
-        mod model {
-            use cursive::{
-                align::Align, theme::{Effect, Style},
-                view::{Nameable, Resizable},
-                views::{
-                    Button, Dialog, EditView, LinearLayout, NamedView, ResizedView,
-                    ScrollView, TextView,
-                },
-            };
-            use crate::{structs::Config, ui::Ptr};
-            pub fn bind(s: Ptr<Config>, vision: bool) -> ResizedView<Dialog> {
-                Dialog::new()
-                    .title(
-                        if vision { "Vision AI Models" } else { "Text-Based AI Models" },
+        use crate::{
+            auth::argon::{self, server::verify_server_pass},
+            structs::{Config, db::{AuthDbConfig, CacheConfig, TlsConfig}},
+            ui::Ptr,
+        };
+        pub fn db_page(s: Ptr<Config>) -> NamedView<impl View> {
+            let mut layout = LinearLayout::vertical();
+            render(&mut layout, s);
+            ScrollView::new(layout.with_name("dbconf"))
+                .show_scrollbars(true)
+                .with_name("㏈ Database")
+        }
+        pub fn render(layout: &mut LinearLayout, s: Ptr<Config>) {
+            layout.clear();
+            layout.add_child(DummyView::new().fixed_height(1));
+            layout
+                .add_child(
+                    TextView::new(
+                            "All the secrets are safely encrypted using your server administrator password",
+                        )
+                        .style(Style::from(Effect::Dim))
+                        .h_align(HAlign::Center),
+                );
+            layout.add_child(DummyView::new().fixed_height(2));
+            layout
+                .add_child(
+                    TextView::new("㏈ Authentication Store Database")
+                        .style(Style::from(Effect::Underline)),
+                );
+            match &s.database.authdb {
+                AuthDbConfig::Moka { .. } => {
+                    layout.add_child(authdb_moka());
+                }
+                AuthDbConfig::Mongodb { .. } => {
+                    layout.add_child(authdb_mongodb());
+                }
+                AuthDbConfig::Tikv { timeout_secs, tls_config, .. } => {
+                    layout.add_child(authdb_tikv(*timeout_secs, tls_config.is_some()));
+                }
+            }
+            layout.add_child(DummyView::new().fixed_height(1));
+            layout
+                .add_child(
+                    TextView::new("㏈ Cache Store Database")
+                        .style(Style::from(Effect::Underline)),
+                );
+            match &s.database.cache {
+                CacheConfig::Redis { .. } => {
+                    layout.add_child(cache_redis());
+                }
+                CacheConfig::Moka => {
+                    layout.add_child(cache_moka());
+                }
+            }
+        }
+        fn select_db(x: &mut Cursive) {
+            x.add_layer(
+                Dialog::around(
+                        ScrollView::new(
+                            LinearLayout::vertical()
+                                .child(
+                                    TextView::new("Standard DBs")
+                                        .style(Style::from(Effect::Underline)),
+                                )
+                                .child(
+                                    LinearLayout::horizontal()
+                                        .child(
+                                            Button::new_raw(
+                                                    "TiKV (Recommended)",
+                                                    |x| {
+                                                        x.pop_layer();
+                                                        let mut state = x
+                                                            .user_data::<Ptr<Config>>()
+                                                            .unwrap()
+                                                            .clone();
+                                                        state.database.authdb = AuthDbConfig::Tikv {
+                                                            endpoints: Default::default(),
+                                                            tls_config: Default::default(),
+                                                            timeout_secs: 30,
+                                                        };
+                                                        x.call_on_name(
+                                                            "dbconf",
+                                                            move |x: &mut LinearLayout| {
+                                                                render(x, state);
+                                                            },
+                                                        );
+                                                    },
+                                                )
+                                                .fixed_width(18),
+                                        )
+                                        .child(DummyView::new().full_width()),
+                                )
+                                .child(
+                                    LinearLayout::horizontal()
+                                        .child(
+                                            Button::new_raw(
+                                                    "MongoDB (Simple Setup)",
+                                                    |x| {
+                                                        x.pop_layer();
+                                                        let mut state = x
+                                                            .user_data::<Ptr<Config>>()
+                                                            .unwrap()
+                                                            .clone();
+                                                        state.database.authdb = AuthDbConfig::Mongodb {
+                                                            url: Default::default(),
+                                                        };
+                                                        x.call_on_name(
+                                                            "dbconf",
+                                                            move |x: &mut LinearLayout| {
+                                                                render(x, state);
+                                                            },
+                                                        );
+                                                    },
+                                                )
+                                                .fixed_width(22),
+                                        )
+                                        .child(DummyView::new().full_width()),
+                                )
+                                .child(DummyView::new().fixed_height(1))
+                                .child(
+                                    TextView::new("Fake DBs")
+                                        .style(Style::from(Effect::Underline)),
+                                )
+                                .child(
+                                    TextView::new(
+                                            "These databases have no persistence nor are suitable for production environment. The database are stored in RAM temporarily only for testing purposes. Never use it in production.",
+                                        )
+                                        .style(Style::from(Effect::Dim)),
+                                )
+                                .child(DummyView::new().fixed_height(1))
+                                .child(
+                                    LinearLayout::horizontal()
+                                        .child(
+                                            Button::new_raw(
+                                                    "Moka",
+                                                    |x| {
+                                                        x.pop_layer();
+                                                        let mut state = x
+                                                            .user_data::<Ptr<Config>>()
+                                                            .unwrap()
+                                                            .clone();
+                                                        state.database.authdb = AuthDbConfig::Moka {};
+                                                        x.call_on_name(
+                                                            "dbconf",
+                                                            move |x: &mut LinearLayout| {
+                                                                render(x, state);
+                                                            },
+                                                        );
+                                                    },
+                                                )
+                                                .fixed_width(4),
+                                        )
+                                        .child(DummyView::new().full_width()),
+                                ),
+                        ),
                     )
-                    .content(
-                        ScrollView::new(gen_cnt(s.clone(), vision)).show_scrollbars(true),
+                    .dismiss_button("Cancel")
+                    .title("Choose your Auth Database")
+                    .min_width(32)
+                    .max_width(48),
+            );
+        }
+        fn select_cache_db(x: &mut Cursive) {
+            x.add_layer(
+                Dialog::around(
+                        ScrollView::new(
+                            LinearLayout::vertical()
+                                .child(
+                                    LinearLayout::horizontal()
+                                        .child(
+                                            Button::new_raw(
+                                                    "Redis (Recommended)",
+                                                    |x| {
+                                                        x.pop_layer();
+                                                        let mut state = x
+                                                            .user_data::<Ptr<Config>>()
+                                                            .unwrap()
+                                                            .clone();
+                                                        state.database.cache = CacheConfig::Redis {
+                                                            url: Default::default(),
+                                                        };
+                                                        x.call_on_name(
+                                                            "dbconf",
+                                                            move |x: &mut LinearLayout| {
+                                                                render(x, state);
+                                                            },
+                                                        );
+                                                    },
+                                                )
+                                                .fixed_width(19),
+                                        )
+                                        .child(DummyView::new().full_width()),
+                                )
+                                .child(
+                                    LinearLayout::horizontal()
+                                        .child(
+                                            Button::new_raw(
+                                                    "Moka (In-RAM; Best for single server setup)",
+                                                    |x| {
+                                                        x.pop_layer();
+                                                        let mut state = x
+                                                            .user_data::<Ptr<Config>>()
+                                                            .unwrap()
+                                                            .clone();
+                                                        state.database.cache = CacheConfig::Moka;
+                                                        x.call_on_name(
+                                                            "dbconf",
+                                                            move |x: &mut LinearLayout| {
+                                                                render(x, state);
+                                                            },
+                                                        );
+                                                    },
+                                                )
+                                                .fixed_width(43),
+                                        )
+                                        .child(DummyView::new().full_width()),
+                                ),
+                        ),
+                    )
+                    .dismiss_button("Cancel")
+                    .title("Choose your Auth Database")
+                    .min_width(32)
+                    .max_width(48),
+            );
+        }
+        pub fn authdb_moka() -> impl View {
+            LinearLayout::horizontal()
+                .child(TextView::new("㏈ Database").full_width())
+                .child(
+                    Button::new_raw(
+                        "Moka",
+                        |x| {
+                            select_db(x);
+                        },
+                    ),
+                )
+        }
+        pub fn authdb_mongodb() -> impl View {
+            let db = LinearLayout::horizontal()
+                .child(TextView::new("㏈ Database").full_width())
+                .child(
+                    Button::new_raw(
+                        "Mongodb",
+                        |x| {
+                            select_db(x);
+                        },
+                    ),
+                );
+            let url = LinearLayout::horizontal()
+                .child(TextView::new("🖳 Mongodb URL").full_width())
+                .child(
+                    Button::new_raw(
+                        "Set ↗",
+                        |x| {
+                            set_url(x, Db::Mongo);
+                        },
+                    ),
+                );
+            LinearLayout::vertical().child(db).child(url)
+        }
+        pub fn cache_redis() -> impl View {
+            let db = LinearLayout::horizontal()
+                .child(TextView::new("㏈ Database").full_width())
+                .child(
+                    Button::new_raw(
+                        "Redis",
+                        |x| {
+                            select_cache_db(x);
+                        },
+                    ),
+                );
+            let url = LinearLayout::horizontal()
+                .child(TextView::new("🖳 Redis URL").full_width())
+                .child(
+                    Button::new_raw(
+                        "Set ↗",
+                        |x| {
+                            set_url(x, Db::Redis);
+                        },
+                    ),
+                );
+            LinearLayout::vertical().child(db).child(url)
+        }
+        pub fn cache_moka() -> impl View {
+            let db = LinearLayout::horizontal()
+                .child(TextView::new("㏈ Database").full_width())
+                .child(
+                    Button::new_raw(
+                        "Moka",
+                        |x| {
+                            select_cache_db(x);
+                        },
+                    ),
+                );
+            LinearLayout::vertical().child(db)
+        }
+        enum Db {
+            Mongo,
+            Redis,
+        }
+        fn set_url(x: &mut Cursive, db: Db) {
+            x.add_layer(
+                Dialog::around(
+                        LinearLayout::vertical()
+                            .child(TextView::new("Enter your server admin password"))
+                            .child(EditView::new().secret().with_name("serverpass"))
+                            .child(TextView::new("Enter the new url"))
+                            .child(EditView::new().with_name("url")),
                     )
                     .button(
-                        "Add",
+                        "Set",
                         move |x| {
-                            x.add_layer(add_model(vision));
+                            let pass = x
+                                .call_on_name(
+                                    "serverpass",
+                                    |x: &mut EditView| x.get_content(),
+                                )
+                                .unwrap();
+                            let given_url = x
+                                .call_on_name("url", |x: &mut EditView| x.get_content())
+                                .unwrap();
+                            let mut user = x.user_data::<Ptr<Config>>().unwrap().clone();
+                            if !verify_server_pass(
+                                    &pass,
+                                    user.admin_pass_hash.as_ref().unwrap(),
+                                )
+                                .unwrap_or(false)
+                            {
+                                x.add_layer(
+                                    Dialog::around(TextView::new("Invalid password"))
+                                        .dismiss_button("Ok"),
+                                );
+                                return;
+                            }
+                            match db {
+                                Db::Mongo => {
+                                    let AuthDbConfig::Mongodb { url } = &mut user
+                                        .database
+                                        .authdb else {
+                                        ::core::panicking::panic(
+                                            "internal error: entered unreachable code",
+                                        )
+                                    };
+                                    *url = argon::encrypt_with_key(&pass, &given_url)
+                                        .into_boxed_str();
+                                }
+                                Db::Redis => {
+                                    let CacheConfig::Redis { url } = &mut user.database.cache
+                                    else {
+                                        ::core::panicking::panic(
+                                            "internal error: entered unreachable code",
+                                        )
+                                    };
+                                    *url = argon::encrypt_with_key(&pass, &given_url)
+                                        .into_boxed_str();
+                                }
+                            }
+                            x.pop_layer();
                         },
                     )
-                    .dismiss_button("Done")
+                    .dismiss_button("Cancel"),
+            );
+        }
+        enum CallNext {
+            Endpoints,
+            TLSConf,
+        }
+        fn get_admin_pass(x: &mut Cursive, tocallnext: CallNext) {
+            x.add_layer(
+                Dialog::around(
+                        LinearLayout::vertical()
+                            .child(
+                                TextView::new("Please enter your administrator password"),
+                            )
+                            .child(EditView::new().secret().with_name("admin_pass")),
+                    )
+                    .title("Authentication Required")
+                    .button(
+                        "Continue",
+                        |x| {
+                            let pass = x
+                                .call_on_name(
+                                    "admin_pass",
+                                    |x: &mut EditView| x.get_content(),
+                                )
+                                .unwrap();
+                            let hash: &str = x
+                                .user_data::<Ptr<Config>>()
+                                .unwrap()
+                                .admin_pass_hash
+                                .as_ref()
+                                .unwrap();
+                            if !verify_server_pass(&pass, hash).unwrap_or(false) {
+                                x.add_layer(
+                                    Dialog::around(TextView::new("Invalid Password"))
+                                        .dismiss_button("Okay"),
+                                );
+                                return;
+                            }
+                            let password = pass.to_string();
+                        },
+                    )
+                    .dismiss_button("Cancel"),
+            );
+        }
+        fn update_tls(x: &mut Cursive) {
+            x.add_layer(
+                Dialog::around(
+                        LinearLayout::vertical()
+                            .child(TextView::new("Select the state"))
+                            .child(
+                                LinearLayout::horizontal()
+                                    .child(
+                                        Button::new_raw(
+                                            "Enabled",
+                                            |x| {
+                                                x.pop_layer();
+                                                let mut state = x
+                                                    .user_data::<Ptr<Config>>()
+                                                    .unwrap()
+                                                    .clone();
+                                                let AuthDbConfig::Tikv { tls_config, .. } = &mut state
+                                                    .database
+                                                    .authdb else {
+                                                    ::core::panicking::panic(
+                                                        "internal error: entered unreachable code",
+                                                    )
+                                                };
+                                                *tls_config = Some(TlsConfig::default());
+                                                x.call_on_name(
+                                                    "dbconf",
+                                                    move |x: &mut LinearLayout| {
+                                                        render(x, state);
+                                                    },
+                                                );
+                                            },
+                                        ),
+                                    )
+                                    .child(DummyView::new().full_width()),
+                            )
+                            .child(
+                                LinearLayout::horizontal()
+                                    .child(
+                                        Button::new_raw(
+                                            "Disabled",
+                                            |x| {
+                                                x.pop_layer();
+                                                let mut state = x
+                                                    .user_data::<Ptr<Config>>()
+                                                    .unwrap()
+                                                    .clone();
+                                                let AuthDbConfig::Tikv { tls_config, .. } = &mut state
+                                                    .database
+                                                    .authdb else {
+                                                    ::core::panicking::panic(
+                                                        "internal error: entered unreachable code",
+                                                    )
+                                                };
+                                                *tls_config = None;
+                                                x.call_on_name(
+                                                    "dbconf",
+                                                    move |x: &mut LinearLayout| {
+                                                        render(x, state);
+                                                    },
+                                                );
+                                            },
+                                        ),
+                                    )
+                                    .child(DummyView::new().full_width()),
+                            ),
+                    )
+                    .dismiss_button("Cancel")
+                    .min_width(32)
+                    .max_width(64),
+            );
+        }
+        pub fn authdb_tikv(timeout: u64, tls_enabled: bool) -> impl View {
+            let db = LinearLayout::horizontal()
+                .child(TextView::new("㏈ Database").full_width())
+                .child(
+                    Button::new_raw(
+                        "TiKV",
+                        |x| {
+                            select_db(x);
+                        },
+                    ),
+                );
+            let url = LinearLayout::horizontal()
+                .child(TextView::new("🖳 TiPD Endpoints").full_width())
+                .child(
+                    Button::new_raw(
+                        "Configure ↗",
+                        |x| {
+                            get_admin_pass(x, CallNext::Endpoints);
+                        },
+                    ),
+                );
+            let tls = LinearLayout::horizontal()
+                .child(TextView::new("🖧 TLS").full_width())
+                .child(
+                    Button::new_raw(
+                        if tls_enabled { "Enabled ↗" } else { "Disabled ↗" },
+                        |x| {
+                            update_tls(x);
+                        },
+                    ),
+                );
+            let tls_conf = LinearLayout::horizontal()
+                .child(TextView::new("🖥 TLS Settings").full_width())
+                .child(
+                    Button::new_raw(
+                        "Configure ↗",
+                        |x| {
+                            get_admin_pass(x, CallNext::TLSConf);
+                        },
+                    ),
+                );
+            let timeout = LinearLayout::horizontal()
+                .child(TextView::new("⊗ Timeout (in seconds)").full_width())
+                .child(
+                    Button::new_raw(
+                            ::alloc::__export::must_use({
+                                ::alloc::fmt::format(format_args!("<{0}>", timeout))
+                            }),
+                            |x| {
+                                x.add_layer(
+                                    Dialog::around(
+                                            EditView::new()
+                                                .on_edit(|x, i, _| {
+                                                    let mut state = x
+                                                        .user_data::<Ptr<Config>>()
+                                                        .unwrap()
+                                                        .clone();
+                                                    if let Ok(data) = i.parse::<u64>() {
+                                                        let AuthDbConfig::Tikv { timeout_secs, .. } = &mut state
+                                                            .database
+                                                            .authdb else {
+                                                            ::core::panicking::panic(
+                                                                "internal error: entered unreachable code",
+                                                            )
+                                                        };
+                                                        *timeout_secs = data;
+                                                        x.call_on_name(
+                                                            "tikv_timeout",
+                                                            move |btn: &mut Button| {
+                                                                btn.set_label_raw(
+                                                                    ::alloc::__export::must_use({
+                                                                        ::alloc::fmt::format(format_args!("<{0}>", data))
+                                                                    }),
+                                                                );
+                                                            },
+                                                        );
+                                                    }
+                                                }),
+                                        )
+                                        .dismiss_button("Okay")
+                                        .title("Enter new timeout")
+                                        .min_width(32)
+                                        .max_width(48),
+                                );
+                            },
+                        )
+                        .with_name("tikv_timeout"),
+                );
+            let mut out = LinearLayout::vertical()
+                .child(db)
+                .child(url)
+                .child(timeout)
+                .child(DummyView::new().fixed_height(1))
+                .child(TextView::new("🖧 TLS").style(Style::from(Effect::Underline)))
+                .child(tls);
+            if tls_enabled {
+                out = out.child(tls_conf);
+            }
+            out
+        }
+    }
+    mod llama {
+        use cursive::{
+            theme::{Effect, Style},
+            view::{Nameable, Resizable},
+            views::{Button, DummyView, LinearLayout, NamedView, ScrollView, TextView},
+        };
+        use crate::{structs::Config, ui::Ptr};
+        mod manager {
+            use std::sync::Arc;
+            use crate::{
+                auth::{
+                    argon::{encrypt_with_key, server::verify_server_pass},
+                    gen_uid,
+                },
+                structs::{Capabilities, Config, LlamaServer, ModelFlag},
+                ui::Ptr,
+            };
+            use cursive::{
+                With, theme::{Effect, Style},
+                utils::markup::StyledString, view::{Margins, Nameable, Resizable},
+                views::{
+                    Button, Checkbox, Dialog, DummyView, EditView, LinearLayout,
+                    ResizedView, ScrollView, TextView,
+                },
+            };
+            pub fn launch(data: Ptr<Config>) -> ResizedView<Dialog> {
+                let s1 = data.clone();
+                let mut layout = LinearLayout::vertical();
+                render_table(&mut layout, data.clone());
+                Dialog::new()
+                    .content(
+                        ScrollView::new(layout.with_name("renderedtable"))
+                            .show_scrollbars(true),
+                    )
+                    .button(
+                        "New",
+                        move |s| {
+                            if let Some(_) = s1.admin_pass_hash {
+                                s.add_layer(new_server(s1.clone(), None));
+                            } else {
+                                s.add_layer(
+                                    Dialog::around(
+                                            TextView::new("Please set a server password first!"),
+                                        )
+                                        .dismiss_button("Ok"),
+                                );
+                            }
+                        },
+                    )
+                    .dismiss_button("Back")
                     .full_screen()
             }
-            fn add_model(cv: bool) -> Dialog {
+            pub fn render_table(layout: &mut LinearLayout, conf: Ptr<Config>) {
+                layout.clear();
+                layout
+                    .add_child(
+                        LinearLayout::horizontal()
+                            .child(
+                                TextView::new("Model ID")
+                                    .style(Style::merge(&[Effect::Dim.into()]))
+                                    .fixed_width(34),
+                            )
+                            .child(
+                                TextView::new("Model Name")
+                                    .style(Style::merge(&[Effect::Dim.into()]))
+                                    .full_width(),
+                            )
+                            .child(
+                                TextView::new("Model URL")
+                                    .style(Style::merge(&[Effect::Dim.into()]))
+                                    .full_width(),
+                            )
+                            .child(
+                                Button::new_raw(
+                                        StyledString::styled("Feat (i)", Style::from(Effect::Dim)),
+                                        |x| {
+                                            x.add_layer(
+                                                Dialog::around(
+                                                        ScrollView::new(
+                                                            LinearLayout::vertical()
+                                                                .child(TextView::new("`Abbr` : Capability"))
+                                                                .child(TextView::new("`A`    : Audio"))
+                                                                .child(TextView::new("`I`    : Image"))
+                                                                .child(TextView::new("`F`    : Files")),
+                                                        ),
+                                                    )
+                                                    .title("Legend")
+                                                    .dismiss_button("Got it"),
+                                            );
+                                        },
+                                    )
+                                    .fixed_width(10),
+                            )
+                            .child(DummyView::new().fixed_width(3))
+                            .child(
+                                TextView::new("Actions")
+                                    .style(Style::merge(&[Effect::Dim.into()]))
+                                    .fixed_width(7),
+                            ),
+                    );
+                for (k, v) in &conf.llama.models {
+                    let conf2 = conf.clone();
+                    let key = Some(k.to_string());
+                    let id = k as &str;
+                    let name = &v.name as &str;
+                    let url = &v.url as &str;
+                    let mut cap = <[_]>::into_vec(::alloc::boxed::box_new([" "]));
+                    if v.capabilities.has(ModelFlag::Audio) {
+                        cap.push("A");
+                    }
+                    if v.capabilities.has(ModelFlag::Image) {
+                        cap.push("I");
+                    }
+                    if v.capabilities.has(ModelFlag::Files) {
+                        cap.push("F");
+                    }
+                    let cap = cap.join("");
+                    layout
+                        .add_child(
+                            LinearLayout::horizontal()
+                                .child(TextView::new(id).fixed_width(34))
+                                .child(TextView::new(name).full_width())
+                                .child(TextView::new(url).full_width())
+                                .child(TextView::new(cap).fixed_width(10))
+                                .child(DummyView::new().fixed_width(6))
+                                .child(
+                                    Button::new_raw(
+                                            "Show",
+                                            move |x| {
+                                                let conf3 = conf2.clone();
+                                                let conf4 = conf2.clone();
+                                                let key_to_pass = key.clone();
+                                                let key_to_pass2 = key.clone();
+                                                x.add_layer(
+                                                    Dialog::around(
+                                                            LinearLayout::vertical()
+                                                                .child(
+                                                                    Button::new_raw(
+                                                                        "Edit",
+                                                                        move |x| {
+                                                                            x.pop_layer();
+                                                                            x.add_layer(new_server(conf3.clone(), key_to_pass.clone()));
+                                                                        },
+                                                                    ),
+                                                                )
+                                                                .child(
+                                                                    Button::new_raw(
+                                                                        "Remove",
+                                                                        move |x| {
+                                                                            _ = conf4
+                                                                                .clone()
+                                                                                .llama
+                                                                                .models
+                                                                                .remove(&key_to_pass2.clone().unwrap() as &str);
+                                                                            x.pop_layer();
+                                                                            let conf2 = conf4.clone();
+                                                                            x.call_on_name(
+                                                                                "renderedtable",
+                                                                                move |layout: &mut LinearLayout| {
+                                                                                    render_table(layout, conf2);
+                                                                                },
+                                                                            );
+                                                                        },
+                                                                    ),
+                                                                ),
+                                                        )
+                                                        .title("Select an action")
+                                                        .dismiss_button("Cancel"),
+                                                );
+                                            },
+                                        )
+                                        .fixed_width(4),
+                                ),
+                        );
+                }
+            }
+            pub fn new_server(
+                conf: Ptr<Config>,
+                key: Option<String>,
+            ) -> ResizedView<ResizedView<Dialog>> {
+                let mut llama = None;
+                if let Some(key) = key.as_ref() {
+                    llama = conf
+                        .llama
+                        .models
+                        .get(key as &str)
+                        .map(|x| Arc::new(x.clone()));
+                }
+                let l1 = llama.clone();
+                let l2 = llama.clone();
+                let l3 = llama.clone();
+                let l4 = llama.clone();
+                let l5 = llama.clone();
+                let l6 = llama.clone();
+                let l7 = llama.clone();
+                let orig_key = key;
                 Dialog::new()
                     .content(
                         ScrollView::new(
                                 LinearLayout::vertical()
-                                    .child(TextView::new("Enter model (eg. llava:7b)"))
-                                    .child(EditView::new().with_name("model_name")),
+                                    .with(move |x| {
+                                        x.add_child(TextView::new("Model Name"));
+                                        x.add_child(
+                                            EditView::new()
+                                                .with(move |x| {
+                                                    if let Some(d) = l1 {
+                                                        x.set_content(&d.name as &str);
+                                                    }
+                                                })
+                                                .with_name("model_name"),
+                                        );
+                                        x.add_child(DummyView::new().fixed_height(1));
+                                        x.add_child(
+                                            TextView::new("Server Url (scheme://url:port)"),
+                                        );
+                                        x.add_child(
+                                            EditView::new()
+                                                .with(move |x| {
+                                                    if let Some(d) = l2 {
+                                                        x.set_content(&d.url as &str);
+                                                    }
+                                                })
+                                                .with_name("server_url"),
+                                        );
+                                        x.add_child(DummyView::new().fixed_height(1));
+                                        x.add_child(
+                                            TextView::new("Server Admin Password (for verification)"),
+                                        );
+                                        x.add_child(
+                                            EditView::new().secret().with_name("server_admin_key"),
+                                        );
+                                        x.add_child(DummyView::new().fixed_height(1));
+                                        x.add_child(TextView::new("API Key (leave blank if none)"));
+                                        x.add_child(
+                                            EditView::new()
+                                                .with(move |x| {
+                                                    if let Some(data) = l3 {
+                                                        if data.apikey.is_some() {
+                                                            x.set_content("< unchanged >");
+                                                        }
+                                                    }
+                                                })
+                                                .with_name("api_key"),
+                                        );
+                                        x.add_child(DummyView::new().fixed_height(1));
+                                        x.add_child(TextView::new("Model Capabilities"));
+                                        x.add_child(
+                                            LinearLayout::horizontal()
+                                                .child(TextView::new("Image Support").full_width())
+                                                .child(
+                                                    Checkbox::new()
+                                                        .with(move |x| {
+                                                            if let Some(data) = l4 {
+                                                                x.set_checked(data.capabilities.has(ModelFlag::Image));
+                                                            }
+                                                        })
+                                                        .with_name("img"),
+                                                ),
+                                        );
+                                        x.add_child(
+                                            LinearLayout::horizontal()
+                                                .child(TextView::new("Audio Support").full_width())
+                                                .child(
+                                                    Checkbox::new()
+                                                        .with(move |x| {
+                                                            if let Some(data) = l5 {
+                                                                x.set_checked(data.capabilities.has(ModelFlag::Audio));
+                                                            }
+                                                        })
+                                                        .with_name("aud"),
+                                                ),
+                                        );
+                                        x.add_child(
+                                            LinearLayout::horizontal()
+                                                .child(TextView::new("Files Support").full_width())
+                                                .child(
+                                                    Checkbox::new()
+                                                        .with(move |x| {
+                                                            if let Some(data) = l6 {
+                                                                x.set_checked(data.capabilities.has(ModelFlag::Files));
+                                                            }
+                                                        })
+                                                        .with_name("file"),
+                                                ),
+                                        );
+                                    }),
                             )
                             .show_scrollbars(true),
                     )
                     .button(
-                        "Add",
+                        "Confirm",
                         move |x| {
                             let model = x
                                 .call_on_name(
@@ -4782,132 +4152,116 @@ mod ui {
                                     |x: &mut EditView| x.get_content(),
                                 )
                                 .unwrap();
-                            let data: &mut Ptr<Config> = x.user_data().unwrap();
-                            let state_ = if cv {
-                                &mut data.ollama.cvmodels
-                            } else {
-                                &mut data.ollama.txtmodels
-                            };
-                            state_.insert(model.to_string().into_boxed_str());
-                            let state = state_.clone();
-                            x.call_on_name(
-                                "models",
-                                |l: &mut LinearLayout| {
-                                    iterate_layout(l, state.iter(), cv);
-                                },
-                            );
+                            let admin_pass = x
+                                .call_on_name(
+                                    "server_admin_key",
+                                    |x: &mut EditView| x.get_content(),
+                                )
+                                .unwrap();
+                            if !verify_server_pass(
+                                    &admin_pass,
+                                    conf.admin_pass_hash.as_ref().unwrap(),
+                                )
+                                .unwrap()
+                            {
+                                x.add_layer(
+                                    Dialog::around(
+                                            TextView::new("Invalid Sever Administrator Password"),
+                                        )
+                                        .dismiss_button("Ok"),
+                                );
+                                return;
+                            }
+                            let url = x
+                                .call_on_name(
+                                    "server_url",
+                                    |x: &mut EditView| x.get_content(),
+                                )
+                                .unwrap();
+                            let api = x
+                                .call_on_name("api_key", |x: &mut EditView| x.get_content())
+                                .unwrap();
+                            let mut key = None;
+                            if api.as_str() != "" {
+                                if api.as_str() == "< unchanged >" {
+                                    if let Some(x) = l7
+                                        .clone()
+                                        .map(|x| x.apikey.clone())
+                                        .flatten()
+                                    {
+                                        key = Some(x);
+                                    } else {
+                                        key = Some(
+                                            encrypt_with_key(&admin_pass, api.as_str()).into_boxed_str(),
+                                        );
+                                    }
+                                } else {
+                                    key = Some(
+                                        encrypt_with_key(&admin_pass, api.as_str()).into_boxed_str(),
+                                    );
+                                }
+                            }
+                            let img = x
+                                .call_on_name("img", |x: &mut Checkbox| x.is_checked())
+                                .unwrap();
+                            let audio = x
+                                .call_on_name("aud", |x: &mut Checkbox| x.is_checked())
+                                .unwrap();
+                            let file = x
+                                .call_on_name("file", |x: &mut Checkbox| x.is_checked())
+                                .unwrap();
+                            conf.clone()
+                                .llama
+                                .models
+                                .insert(
+                                    orig_key
+                                        .clone()
+                                        .map(|x| x.into_boxed_str())
+                                        .unwrap_or(gen_uid().unwrap().into_boxed_str()),
+                                    LlamaServer {
+                                        name: model.to_string().into_boxed_str(),
+                                        url: url.to_string().into_boxed_str(),
+                                        apikey: key,
+                                        capabilities: {
+                                            let mut capab = Capabilities(0u16);
+                                            if img {
+                                                capab.add(ModelFlag::Image);
+                                            }
+                                            if audio {
+                                                capab.add(ModelFlag::Audio);
+                                            }
+                                            if file {
+                                                capab.add(ModelFlag::Files);
+                                            }
+                                            capab
+                                        },
+                                    },
+                                );
                             x.pop_layer();
-                            x.add_layer(
-                                Dialog::around(TextView::new("Successfully updated!"))
-                                    .title("Successful")
-                                    .dismiss_button("Ok"),
+                            let conf2 = conf.clone();
+                            x.call_on_name(
+                                "renderedtable",
+                                move |layout: &mut LinearLayout| {
+                                    render_table(layout, conf2);
+                                },
                             );
                         },
                     )
                     .dismiss_button("Cancel")
-            }
-            fn gen_cnt(s: Ptr<Config>, cv: bool) -> NamedView<LinearLayout> {
-                let mut layout = LinearLayout::vertical();
-                iterate_layout(
-                    &mut layout,
-                    if cv {
-                        s.ollama.cvmodels.iter()
-                    } else {
-                        s.ollama.txtmodels.iter()
-                    },
-                    cv,
-                );
-                layout.with_name("models")
-            }
-            fn iterate_layout<'a, T>(l: &mut LinearLayout, binds: T, cv: bool)
-            where
-                T: Iterator<Item = &'a Box<str>>,
-            {
-                l.clear();
-                let binds = binds.collect::<Vec<_>>();
-                if binds.is_empty() {
-                    l.add_child(TextView::new("No models detected"));
-                } else {
-                    l.add_child(
-                        LinearLayout::horizontal()
-                            .child(
-                                TextView::new("SNo")
-                                    .style(Style::merge(&[Effect::Dim.into()]))
-                                    .fixed_width(5),
-                            )
-                            .child(
-                                TextView::new("Model")
-                                    .style(Style::merge(&[Effect::Dim.into()]))
-                                    .full_width(),
-                            )
-                            .child(
-                                TextView::new("")
-                                    .style(Style::merge(&[Effect::Dim.into()]))
-                                    .fixed_width(12),
-                            ),
-                    );
-                }
-                binds
-                    .iter()
-                    .enumerate()
-                    .for_each(|(index, model)| {
-                        l.add_child(layout_child(index, model, cv));
-                    });
-            }
-            fn layout_child(index: usize, model: &str, cv: bool) -> LinearLayout {
-                let index_str = model.to_owned();
-                LinearLayout::horizontal()
-                    .child(
-                        TextView::new(
-                                ::alloc::__export::must_use({
-                                    ::alloc::fmt::format(format_args!("{0}.", index + 1))
-                                }),
-                            )
-                            .align(Align::center_left())
-                            .fixed_width(5),
-                    )
-                    .child(TextView::new(model).full_width())
-                    .child(
-                        Button::new_raw(
-                                "✕ Remove",
-                                move |x| {
-                                    x.with_user_data(|x: &mut Ptr<Config>| {
-                                        if cv {
-                                            x.ollama.cvmodels.remove(&index_str as &str);
-                                        } else {
-                                            x.ollama.txtmodels.remove(&index_str as &str);
-                                        }
-                                    });
-                                    let state: &mut Ptr<Config> = x.user_data().unwrap();
-                                    let state = if cv {
-                                        &mut state.ollama.cvmodels
-                                    } else {
-                                        &mut state.ollama.txtmodels
-                                    }
-                                        .clone();
-                                    x.call_on_name(
-                                        "models",
-                                        |l: &mut LinearLayout| {
-                                            iterate_layout(l, state.iter(), cv);
-                                        },
-                                    );
-                                },
-                            )
-                            .fixed_width(12),
-                    )
+                    .padding(Margins::lrtb(1, 1, 1, 1))
+                    .max_height(50)
+                    .max_width(40)
             }
         }
-        pub fn ollama_page(s: Ptr<Config>) -> NamedView<ScrollView<LinearLayout>> {
+        pub fn llama_page(s: Ptr<Config>) -> NamedView<ScrollView<LinearLayout>> {
             let mut layout = LinearLayout::vertical();
-            layout.add_child(server(s.clone()));
-            layout.add_child(port(s.clone()));
             layout.add_child(DummyView::new().fixed_height(1));
             layout
                 .add_child(
-                    TextView::new("Chat")
-                        .style(Style::merge(&[Effect::Underline.into()])),
+                    TextView::new(
+                        "AHQ AI uses llama-server to provide inference. You need to host a llama server with a given model that you can configure here. LLAMA.CPP allows us to enable audio, image, file support!",
+                    ),
                 );
-            layout.add_child(msgs(s.clone()));
             layout.add_child(DummyView::new().fixed_height(1));
             layout
                 .add_child(
@@ -4915,146 +4269,20 @@ mod ui {
                         .style(Style::merge(&[Effect::Underline.into()])),
                 );
             let s1 = s.clone();
-            let s2 = s.clone();
             layout
                 .add_child(
                     LinearLayout::horizontal()
-                        .child(TextView::new("⊠ Vision enabled Models").full_width())
+                        .child(TextView::new("🖧 Models").full_width())
                         .child(
                             Button::new_raw(
-                                "Manage ↗",
+                                "Launch Model Manager ↗",
                                 move |x| {
-                                    x.add_layer(model::bind(s1.clone(), true));
+                                    x.add_layer(manager::launch(s1.clone()));
                                 },
                             ),
                         ),
                 );
-            layout
-                .add_child(
-                    LinearLayout::horizontal()
-                        .child(TextView::new("⊟ Text only models").full_width())
-                        .child(
-                            Button::new_raw(
-                                "Manage ↗",
-                                move |x| {
-                                    x.add_layer(model::bind(s2.clone(), false));
-                                },
-                            ),
-                        ),
-                );
-            ScrollView::new(layout).show_scrollbars(true).with_name("🖧 Ollama")
-        }
-        fn server(s: Ptr<Config>) -> LinearLayout {
-            LinearLayout::horizontal()
-                .child(TextView::new("🖥 Ollama Server Hostname").full_width())
-                .child(
-                    Button::new_raw(
-                            ::alloc::__export::must_use({
-                                ::alloc::fmt::format(format_args!("[{0}]", &s.ollama.host))
-                            }),
-                            |x| {
-                                x.add_layer(
-                                    Dialog::around(
-                                            EditView::new()
-                                                .on_edit(|x, txt, _| {
-                                                    let data: &mut Ptr<Config> = x.user_data().unwrap();
-                                                    data.ollama.host = txt.into();
-                                                    x.call_on_name(
-                                                        "ollama_hostname",
-                                                        |x: &mut Button| {
-                                                            x.set_label_raw(
-                                                                ::alloc::__export::must_use({
-                                                                    ::alloc::fmt::format(format_args!("[{0}]", txt))
-                                                                }),
-                                                            );
-                                                        },
-                                                    );
-                                                })
-                                                .on_submit(|x, _| _ = x.pop_layer()),
-                                        )
-                                        .dismiss_button("Close")
-                                        .title("Enter Ollama Hostname"),
-                                );
-                            },
-                        )
-                        .with_name("ollama_hostname"),
-                )
-        }
-        fn msgs(s: Ptr<Config>) -> LinearLayout {
-            LinearLayout::horizontal()
-                .child(TextView::new("🖥 Max message pair per chat").full_width())
-                .child(
-                    Button::new_raw(
-                            ::alloc::__export::must_use({
-                                ::alloc::fmt::format(format_args!("<{0}>", &s.ollama.msgs))
-                            }),
-                            |x| {
-                                x.add_layer(
-                                    Dialog::around(
-                                            EditView::new()
-                                                .on_edit(|x, txt, _| {
-                                                    let data: &mut Ptr<Config> = x.user_data().unwrap();
-                                                    if let Ok(num) = txt.parse::<usize>() {
-                                                        data.ollama.msgs = num;
-                                                        x.call_on_name(
-                                                            "ollama_msgs",
-                                                            |x: &mut Button| {
-                                                                x.set_label_raw(
-                                                                    ::alloc::__export::must_use({
-                                                                        ::alloc::fmt::format(format_args!("<{0}>", num))
-                                                                    }),
-                                                                );
-                                                            },
-                                                        );
-                                                    }
-                                                })
-                                                .on_submit(|x, _| _ = x.pop_layer()),
-                                        )
-                                        .dismiss_button("Close")
-                                        .title("Enter Maximum"),
-                                );
-                            },
-                        )
-                        .with_name("ollama_msgs"),
-                )
-        }
-        fn port(s: Ptr<Config>) -> LinearLayout {
-            LinearLayout::horizontal()
-                .child(TextView::new("🕸 Ollama Server Port").full_width())
-                .child(
-                    Button::new_raw(
-                            ::alloc::__export::must_use({
-                                ::alloc::fmt::format(format_args!("<{0}>", &s.ollama.port))
-                            }),
-                            |x| {
-                                x.add_layer(
-                                    Dialog::around(
-                                            EditView::new()
-                                                .on_edit(|x, txt, _| {
-                                                    let data: &mut Ptr<Config> = x.user_data().unwrap();
-                                                    if let Ok(port) = txt.parse::<u16>() {
-                                                        data.ollama.port = port;
-                                                        x.call_on_name(
-                                                            "ollama_port",
-                                                            |x: &mut Button| {
-                                                                x.set_label_raw(
-                                                                    ::alloc::__export::must_use({
-                                                                        ::alloc::fmt::format(format_args!("<{0}>", port))
-                                                                    }),
-                                                                );
-                                                            },
-                                                        );
-                                                    }
-                                                })
-                                                .on_submit(|x, _| _ = x.pop_layer()),
-                                        )
-                                        .dismiss_button("Close")
-                                        .title("Enter Ollama Hostname"),
-                                );
-                            },
-                        )
-                        .with_name("ollama_port"),
-                )
+            ScrollView::new(layout).show_scrollbars(true).with_name("🖧 Llama Server")
         }
     }
     pub(crate) mod lazy {
@@ -5082,6 +4310,8 @@ mod ui {
                                 Authentication::OpenToAll => {
                                     Authentication::Account {
                                         registration_allowed: false,
+                                        max_memory: 64,
+                                        time_cost: 5,
                                     }
                                 }
                             }
@@ -5140,7 +4370,6 @@ mod ui {
             .build()
             .expect("Unable to build async runtime")
     });
-    use bcrypt::hash;
     fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
         l.add_child(
             TextView::new("Welcome to AHQ-AI Server Configuration")
@@ -5151,7 +4380,7 @@ mod ui {
         l.add_child(
             TextView::new(
                     ::alloc::__export::must_use({
-                        ::alloc::fmt::format(format_args!("AHQ AI Server v{0}", "0.1.3"))
+                        ::alloc::fmt::format(format_args!("AHQ AI Server v{0}", "0.3.2"))
                     }),
                 )
                 .align(Align::top_right())
@@ -5183,30 +4412,73 @@ mod ui {
                 .child(TextView::new("⚒ Administrator Password").full_width())
                 .child(
                     Button::new_raw(
-                        "Set/Update ↗",
+                        "Update ↗",
                         move |x| {
                             x.add_layer(
                                 Dialog::around(
                                         LinearLayout::vertical()
-                                            .child(
-                                                EditView::new()
-                                                    .secret()
-                                                    .on_submit(|x, txt| {
-                                                        let c_: &mut Ptr<Config> = x.user_data().unwrap();
-                                                        c_.admin_pass_hash = Some(
-                                                            hash(txt, BCRYPT_COST).expect("Unknown error"),
-                                                        );
-                                                        x.pop_layer();
-                                                    }),
-                                            )
+                                            .child(TextView::new("Old Password"))
+                                            .child(EditView::new().secret().with_name("old_pwd"))
+                                            .child(DummyView::new().fixed_height(1))
+                                            .child(TextView::new("New Password"))
+                                            .child(EditView::new().secret().with_name("new_pwd"))
                                             .child(TextView::new("Press Enter key to submit"))
                                             .child(
                                                 TextView::new(
-                                                    "The UI might hand for a moment due to hashing algorithm",
+                                                    "The UI might hang for a moment due to hashing algorithm and secret migration",
                                                 ),
                                             ),
                                     )
-                                    .title("New Administrator Password")
+                                    .title("Change Administrator Password")
+                                    .button(
+                                        "Change",
+                                        |x| {
+                                            let old_pass = x
+                                                .call_on_name("old_pwd", |x: &mut EditView| x.get_content())
+                                                .unwrap();
+                                            let new_pass = x
+                                                .call_on_name("new_pwd", |x: &mut EditView| x.get_content())
+                                                .unwrap();
+                                            if old_pass.len().min(new_pass.len()) <= 8 {
+                                                x.add_layer(
+                                                    Dialog::around(
+                                                            TextView::new("Password must have more than 8 characters"),
+                                                        )
+                                                        .dismiss_button("Ok"),
+                                                );
+                                                return;
+                                            }
+                                            let mut conf: Ptr<Config> = x
+                                                .user_data::<Ptr<Config>>()
+                                                .unwrap()
+                                                .clone();
+                                            if !verify_server_pass(
+                                                    old_pass.as_str(),
+                                                    conf.admin_pass_hash.as_ref().unwrap(),
+                                                )
+                                                .unwrap_or_default()
+                                            {
+                                                x.add_layer(
+                                                    Dialog::around(TextView::new("Old password did not match"))
+                                                        .dismiss_button("Ok"),
+                                                );
+                                                return;
+                                            }
+                                            conf.admin_pass_hash = Some(
+                                                hash_server_pass(&new_pass).unwrap(),
+                                            );
+                                            migrate_config(&old_pass, &new_pass, conf.deref_mut());
+                                            x.pop_layer();
+                                            x.add_layer(
+                                                Dialog::around(
+                                                        TextView::new(
+                                                            "Password change was successful, all your encrypted keys were updated.",
+                                                        ),
+                                                    )
+                                                    .dismiss_button("Ok"),
+                                            );
+                                        },
+                                    )
                                     .dismiss_button("Cancel"),
                             );
                         },
@@ -5217,8 +4489,23 @@ mod ui {
                     Button::new_raw(
                         "Remove ↗",
                         move |x| {
-                            let c_: &mut Ptr<Config> = x.user_data().unwrap();
-                            c_.admin_pass_hash = None;
+                            x.add_layer(
+                                Dialog::around(
+                                        TextView::new(
+                                            "This will invalidate the configuration and you will lose all of your encrypted secrets!",
+                                        ),
+                                    )
+                                    .title("Danger")
+                                    .dismiss_button("Cancel")
+                                    .button(
+                                        "OK, I understand the risks",
+                                        |x| {
+                                            let c_: &mut Ptr<Config> = x.user_data().unwrap();
+                                            c_.admin_pass_hash = None;
+                                            x.pop_layer();
+                                        },
+                                    ),
+                            );
                         },
                     ),
                 ),
@@ -5252,6 +4539,8 @@ mod ui {
                                                         2 => {
                                                             Authentication::Account {
                                                                 registration_allowed: true,
+                                                                max_memory: 64,
+                                                                time_cost: 5,
                                                             }
                                                         }
                                                         _ => {
@@ -5362,8 +4651,9 @@ mod ui {
         tabs.add_tab(
             ScrollView::new(gene).show_scrollbars(true).with_name("䷸ General"),
         );
-        tabs.add_tab(ollama::ollama_page(c_.clone()));
+        tabs.add_tab(llama::llama_page(c_.clone()));
         tabs.add_tab(auth::auth_page(&mut siv));
+        tabs.add_tab(dbconf::db_page(c_.clone()));
         tabs.add_tab(
             ScrollView::new(
                     LinearLayout::vertical()
@@ -5471,6 +4761,37 @@ mod ui {
                     .dismiss_button("Ok"),
             );
         }
+        if let None = &config.admin_pass_hash {
+            siv.add_layer(
+                Dialog::around(
+                        LinearLayout::vertical()
+                            .child(TextView::new("Set a server administrator password"))
+                            .child(EditView::new().secret().with_name("pass")),
+                    )
+                    .button(
+                        "Set",
+                        |x| {
+                            let pass = x
+                                .call_on_name("pass", |x: &mut EditView| x.get_content())
+                                .unwrap();
+                            if pass.len() > 8 {
+                                let c_: &mut Ptr<Config> = x.user_data().unwrap();
+                                c_.admin_pass_hash = Some(
+                                    hash_server_pass(pass.as_str()).unwrap(),
+                                );
+                                x.pop_layer();
+                            } else {
+                                x.add_layer(
+                                    Dialog::around(
+                                            TextView::new("Must be more than 8 characters"),
+                                        )
+                                        .dismiss_button("Ok"),
+                                );
+                            }
+                        },
+                    ),
+            );
+        }
         siv.run();
         ASYNC
             .block_on(async move {
@@ -5524,29 +4845,244 @@ mod ui {
 pub mod auth {
     use crate::{
         auth::{
-            authserver::{AuthServer, mongodb::MongodbClient, tikv::TikvClient},
+            authserver::{
+                AuthServer, moka::MokaTestingDB, mongodb::MongodbClient, tikv::TikvClient,
+            },
             cache::{AsyncCaching, moka::MokaSessions, redis::RedisSessions},
             hash::HashingAgent,
         },
-        server::{CONFIG, DBCONF},
+        server::CONFIG,
         structs::{
-            Authentication, BCRYPT_COST, db::{AuthDbConfig, CacheConfig},
-            error::Returns,
+            Authentication, db::{AuthDbConfig, CacheConfig},
+            error::{Returns, ServerError},
         },
     };
     use base64::{Engine as _, engine::general_purpose};
-    use bcrypt::hash;
+    use log::warn;
     use rand::{Rng, seq::IndexedRandom};
     use std::{sync::LazyLock, time::{SystemTime, UNIX_EPOCH}};
     use tokio::task::spawn_blocking;
+    pub mod argon {
+        use std::sync::LazyLock;
+        use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
+        use argon2::{
+            Algorithm, Argon2, Params, PasswordHash, PasswordHasher,
+            RECOMMENDED_SALT_LEN, Version, password_hash::SaltString,
+        };
+        use base64::{Engine, prelude::BASE64_STANDARD};
+        use rand::{TryRngCore, rngs::OsRng};
+        use zeroize::Zeroize;
+        use crate::{
+            server::CONFIG,
+            structs::{
+                Authentication, Config, db::{AuthDbConfig, CacheConfig},
+                error::{Returns, ServerError},
+            },
+        };
+        const KEY_LEN: usize = 32;
+        static KEYARGON: LazyLock<Argon2> = LazyLock::new(|| {
+            let iterations = 2;
+            let memory = 32;
+            let params = Params::new(memory * 1024, iterations, 1, Some(KEY_LEN))
+                .unwrap();
+            Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
+        });
+        static HASHARGON: LazyLock<Argon2> = LazyLock::new(|| {
+            let Authentication::Account { max_memory, time_cost, .. } = CONFIG
+                .authentication
+                .clone() else {
+                ::core::panicking::panic("internal error: entered unreachable code")
+            };
+            let params = Params::new(max_memory * 1024, time_cost, 1, None).unwrap();
+            Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
+        });
+        pub static SALT_LEN: usize = RECOMMENDED_SALT_LEN * 2;
+        pub fn hash_pass(pwd: &str, rng: &mut OsRng) -> Returns<String> {
+            let mut salt_bytes = [0u8; SALT_LEN];
+            rng.try_fill_bytes(&mut salt_bytes)?;
+            let data: String = HASHARGON
+                .hash_password(
+                    pwd.as_bytes(),
+                    &SaltString::encode_b64(&salt_bytes)
+                        .map_err(|x| ServerError::ArgonErr(x))?,
+                )
+                .map_err(|x| ServerError::ArgonErr(x))?
+                .to_string();
+            Ok(data)
+        }
+        pub fn verify(pwd: &str, hash: &str) -> Returns<bool> {
+            Ok(
+                PasswordHash::new(hash)
+                    .map_err(|x| ServerError::ArgonErr(x))?
+                    .verify_password(&[&*HASHARGON], pwd)
+                    .ok()
+                    .is_some(),
+            )
+        }
+        pub mod server {
+            use crate::auth::argon::SALT_LEN;
+            use crate::structs::error::ServerError;
+            use crate::{auth::argon::KEYARGON, structs::error::Returns};
+            use argon2::{PasswordHash, PasswordHasher, password_hash::SaltString};
+            use rand::{TryRngCore, rngs::OsRng};
+            /// Use only in the Terminal User Interface
+            pub fn hash_server_pass(pwd: &str) -> Returns<String> {
+                let mut salt_bytes = [0u8; SALT_LEN];
+                OsRng::default().try_fill_bytes(&mut salt_bytes)?;
+                let data: String = KEYARGON
+                    .hash_password(
+                        pwd.as_bytes(),
+                        &SaltString::encode_b64(&salt_bytes)
+                            .map_err(|x| ServerError::ArgonErr(x))?,
+                    )
+                    .map_err(|x| ServerError::ArgonErr(x))?
+                    .to_string();
+                Ok(data)
+            }
+            /// Use only in the Terminal User Interface
+            pub fn verify_server_pass(pwd: &str, hash: &str) -> Returns<bool> {
+                Ok(
+                    PasswordHash::new(hash)
+                        .map_err(|x| ServerError::ArgonErr(x))?
+                        .verify_password(&[&*KEYARGON], pwd)
+                        .ok()
+                        .is_some(),
+                )
+            }
+        }
+        const NONCE_LEN: usize = 12;
+        pub fn encrypt_with_key(pwd: &str, data: &str) -> String {
+            let salt = {
+                let mut salt_bytes = [0u8; SALT_LEN];
+                OsRng::default().try_fill_bytes(&mut salt_bytes).unwrap();
+                salt_bytes
+            };
+            let mut key = {
+                let mut key_bytes = [0u8; KEY_LEN];
+                KEYARGON
+                    .hash_password_into(pwd.as_bytes(), salt.as_slice(), &mut key_bytes)
+                    .unwrap();
+                key_bytes
+            };
+            let aes = { Aes256Gcm::new_from_slice(&key).unwrap() };
+            let nonce_slice = {
+                let mut nonce_slice = [0u8; NONCE_LEN];
+                OsRng::default().try_fill_bytes(&mut nonce_slice).unwrap();
+                nonce_slice
+            };
+            let nonce = Nonce::from_slice(&nonce_slice);
+            let ciphertext_with_tag = aes.encrypt(nonce, data.as_bytes()).unwrap();
+            key.zeroize();
+            let mut out = Vec::from(salt);
+            out.extend(nonce_slice);
+            out.extend(ciphertext_with_tag.into_iter());
+            BASE64_STANDARD.encode(out)
+        }
+        pub fn decrypt_with_key(pwd: &str, data: &str) -> String {
+            let raw = BASE64_STANDARD.decode(data).unwrap();
+            let salt_slice = &raw[0..SALT_LEN];
+            let nonce_slice = &raw[SALT_LEN..(SALT_LEN + NONCE_LEN)];
+            let nonce = Nonce::from_slice(nonce_slice);
+            let cipher = &raw[(SALT_LEN + NONCE_LEN)..];
+            let mut key = {
+                let mut key_bytes = [0u8; KEY_LEN];
+                KEYARGON
+                    .hash_password_into(pwd.as_bytes(), salt_slice, &mut key_bytes)
+                    .unwrap();
+                key_bytes
+            };
+            let aes = { Aes256Gcm::new_from_slice(&key).unwrap() };
+            key.zeroize();
+            let ciphertext_with_tag = aes.decrypt(nonce, cipher).unwrap();
+            String::from_utf8(ciphertext_with_tag).unwrap()
+        }
+        pub fn migrate_key(old_pass: &str, new_pass: &str, encrypted: &str) -> String {
+            let data = decrypt_with_key(old_pass, encrypted);
+            encrypt_with_key(new_pass, &data)
+        }
+        pub fn migrate_config(old_pass: &str, new_pass: &str, config: &mut Config) {
+            {
+                config
+                    .llama
+                    .models
+                    .iter_mut()
+                    .for_each(|(_, v)| {
+                        if let Some(api) = &mut v.apikey {
+                            *api = migrate_key(old_pass, new_pass, &api)
+                                .into_boxed_str();
+                        }
+                    });
+            }
+            {
+                match &mut config.database.authdb {
+                    AuthDbConfig::Mongodb { url } => {
+                        *url = migrate_key(old_pass, new_pass, &url).into_boxed_str();
+                    }
+                    AuthDbConfig::Tikv { endpoints, .. } => {
+                        endpoints
+                            .iter_mut()
+                            .for_each(|data| {
+                                *data = migrate_key(old_pass, new_pass, &data)
+                                    .into_boxed_str();
+                            });
+                    }
+                    AuthDbConfig::Moka { .. } => {}
+                }
+            }
+            {
+                match &mut config.database.cache {
+                    CacheConfig::Moka => {}
+                    CacheConfig::Redis { url } => {
+                        *url = migrate_key(old_pass, new_pass, &url).into_boxed_str();
+                    }
+                }
+            }
+        }
+        pub fn decrypt_config(pass: &str, config: &mut Config) {
+            {
+                config
+                    .llama
+                    .models
+                    .iter_mut()
+                    .for_each(|(_, v)| {
+                        if let Some(api) = &mut v.apikey {
+                            *api = decrypt_with_key(pass, &api).into_boxed_str();
+                        }
+                    });
+            }
+            {
+                match &mut config.database.authdb {
+                    AuthDbConfig::Mongodb { url } => {
+                        *url = decrypt_with_key(pass, &url).into_boxed_str();
+                    }
+                    AuthDbConfig::Tikv { endpoints, .. } => {
+                        endpoints
+                            .iter_mut()
+                            .for_each(|data| {
+                                *data = decrypt_with_key(pass, &data).into_boxed_str();
+                            });
+                    }
+                    AuthDbConfig::Moka { .. } => {}
+                }
+            }
+            {
+                match &mut config.database.cache {
+                    CacheConfig::Moka => {}
+                    CacheConfig::Redis { url } => {
+                        *url = decrypt_with_key(pass, &url).into_boxed_str();
+                    }
+                }
+            }
+        }
+    }
     pub mod hash {
-        use bcrypt::{hash, verify};
         use crossbeam_channel::{Sender, bounded};
         use ed25519_dalek::{Signature, SigningKey, ed25519::signature::SignerMut};
+        use rand::rngs::OsRng;
         use std::thread;
         use std::thread::available_parallelism;
         use tokio::sync::oneshot::{Sender as OneshotSender, channel};
-        use crate::{auth::INTEGRITY_KEY, structs::BCRYPT_COST};
+        use crate::auth::{INTEGRITY_KEY, argon};
         pub struct HashingAgent(Sender<HashResp>);
         pub enum HashResp {
             CheckHash { pass: String, hash: String, tx: OneshotSender<Option<bool>> },
@@ -5557,20 +5093,21 @@ pub mod auth {
             pub fn new() -> Self {
                 let threads = available_parallelism()
                     .expect("Unable to get parallelism")
-                    .get();
+                    .get() - 1;
                 let (tx, rx) = bounded::<HashResp>(2 * threads);
                 for _ in 0..threads {
                     let rxc = rx.clone();
                     thread::spawn(move || {
                         let mut signer = SigningKey::from_keypair_bytes(INTEGRITY_KEY)
                             .unwrap();
+                        let mut rng = OsRng::default();
                         while let Ok(x) = rxc.recv() {
                             match x {
                                 HashResp::GenHash { pass, tx } => {
-                                    _ = tx.send(hash(&pass, BCRYPT_COST).ok());
+                                    _ = tx.send(argon::hash_pass(&pass, &mut rng).ok());
                                 }
                                 HashResp::CheckHash { pass, hash, tx } => {
-                                    _ = tx.send(verify(&pass, &hash).ok());
+                                    _ = tx.send(argon::verify(&pass, &hash).ok());
                                 }
                                 HashResp::Challenge { bytes, tx } => {
                                     let sign = signer.try_sign(&bytes).ok();
@@ -5635,13 +5172,235 @@ pub mod auth {
     pub mod authserver {
         use crate::structs::error::Returns;
         use async_trait::async_trait;
+        pub mod moka {
+            use async_trait::async_trait;
+            use moka::future::Cache;
+            use crate::{
+                auth::authserver::AuthServer, structs::error::{Returns, ServerError},
+            };
+            pub struct MokaTestingDB {
+                cache: Cache<String, String>,
+            }
+            impl MokaTestingDB {
+                pub fn new() -> Self {
+                    Self {
+                        cache: Cache::builder().build(),
+                    }
+                }
+            }
+            impl AuthServer for MokaTestingDB {
+                #[allow(
+                    elided_named_lifetimes,
+                    clippy::async_yields_async,
+                    clippy::diverging_sub_expression,
+                    clippy::let_unit_value,
+                    clippy::needless_arbitrary_self_type,
+                    clippy::no_effect_underscore_binding,
+                    clippy::shadow_same,
+                    clippy::type_complexity,
+                    clippy::type_repetition_in_bounds,
+                    clippy::used_underscore_binding
+                )]
+                fn get<'a, 'async_trait>(
+                    &'a self,
+                    uid: &'a str,
+                ) -> ::core::pin::Pin<
+                    Box<
+                        dyn ::core::future::Future<
+                            Output = Returns<Option<String>>,
+                        > + ::core::marker::Send + 'async_trait,
+                    >,
+                >
+                where
+                    'a: 'async_trait,
+                    Self: 'async_trait,
+                {
+                    Box::pin(async move {
+                        if let ::core::option::Option::Some(__ret) = ::core::option::Option::None::<
+                            Returns<Option<String>>,
+                        > {
+                            #[allow(unreachable_code)] return __ret;
+                        }
+                        let __self = self;
+                        let __ret: Returns<Option<String>> = {
+                            Ok(__self.cache.get(uid).await)
+                        };
+                        #[allow(unreachable_code)] __ret
+                    })
+                }
+                #[allow(
+                    elided_named_lifetimes,
+                    clippy::async_yields_async,
+                    clippy::diverging_sub_expression,
+                    clippy::let_unit_value,
+                    clippy::needless_arbitrary_self_type,
+                    clippy::no_effect_underscore_binding,
+                    clippy::shadow_same,
+                    clippy::type_complexity,
+                    clippy::type_repetition_in_bounds,
+                    clippy::used_underscore_binding
+                )]
+                fn search<'a, 'async_trait>(
+                    &'a self,
+                    __arg1: String,
+                ) -> ::core::pin::Pin<
+                    Box<
+                        dyn ::core::future::Future<
+                            Output = Returns<Vec<Vec<u8>>>,
+                        > + ::core::marker::Send + 'async_trait,
+                    >,
+                >
+                where
+                    'a: 'async_trait,
+                    Self: 'async_trait,
+                {
+                    Box::pin(async move {
+                        if let ::core::option::Option::Some(__ret) = ::core::option::Option::None::<
+                            Returns<Vec<Vec<u8>>>,
+                        > {
+                            #[allow(unreachable_code)] return __ret;
+                        }
+                        let __self = self;
+                        let __arg1 = __arg1;
+                        let __ret: Returns<Vec<Vec<u8>>> = {
+                            Err(ServerError::StringConvertErr)
+                        };
+                        #[allow(unreachable_code)] __ret
+                    })
+                }
+                #[allow(
+                    elided_named_lifetimes,
+                    clippy::async_yields_async,
+                    clippy::diverging_sub_expression,
+                    clippy::let_unit_value,
+                    clippy::needless_arbitrary_self_type,
+                    clippy::no_effect_underscore_binding,
+                    clippy::shadow_same,
+                    clippy::type_complexity,
+                    clippy::type_repetition_in_bounds,
+                    clippy::used_underscore_binding
+                )]
+                fn exists<'a, 'async_trait>(
+                    &'a self,
+                    uid: &'a str,
+                ) -> ::core::pin::Pin<
+                    Box<
+                        dyn ::core::future::Future<
+                            Output = Returns<bool>,
+                        > + ::core::marker::Send + 'async_trait,
+                    >,
+                >
+                where
+                    'a: 'async_trait,
+                    Self: 'async_trait,
+                {
+                    Box::pin(async move {
+                        if let ::core::option::Option::Some(__ret) = ::core::option::Option::None::<
+                            Returns<bool>,
+                        > {
+                            #[allow(unreachable_code)] return __ret;
+                        }
+                        let __self = self;
+                        let __ret: Returns<bool> = {
+                            Ok(__self.cache.contains_key(uid))
+                        };
+                        #[allow(unreachable_code)] __ret
+                    })
+                }
+                #[allow(
+                    elided_named_lifetimes,
+                    clippy::async_yields_async,
+                    clippy::diverging_sub_expression,
+                    clippy::let_unit_value,
+                    clippy::needless_arbitrary_self_type,
+                    clippy::no_effect_underscore_binding,
+                    clippy::shadow_same,
+                    clippy::type_complexity,
+                    clippy::type_repetition_in_bounds,
+                    clippy::used_underscore_binding
+                )]
+                fn update<'a, 'async_trait>(
+                    &'a self,
+                    uid: String,
+                    data: String,
+                ) -> ::core::pin::Pin<
+                    Box<
+                        dyn ::core::future::Future<
+                            Output = Returns<()>,
+                        > + ::core::marker::Send + 'async_trait,
+                    >,
+                >
+                where
+                    'a: 'async_trait,
+                    Self: 'async_trait,
+                {
+                    Box::pin(async move {
+                        if let ::core::option::Option::Some(__ret) = ::core::option::Option::None::<
+                            Returns<()>,
+                        > {
+                            #[allow(unreachable_code)] return __ret;
+                        }
+                        let __self = self;
+                        let uid = uid;
+                        let data = data;
+                        let __ret: Returns<()> = {
+                            __self.cache.insert(uid, data).await;
+                            Ok(())
+                        };
+                        #[allow(unreachable_code)] __ret
+                    })
+                }
+                #[allow(
+                    elided_named_lifetimes,
+                    clippy::async_yields_async,
+                    clippy::diverging_sub_expression,
+                    clippy::let_unit_value,
+                    clippy::needless_arbitrary_self_type,
+                    clippy::no_effect_underscore_binding,
+                    clippy::shadow_same,
+                    clippy::type_complexity,
+                    clippy::type_repetition_in_bounds,
+                    clippy::used_underscore_binding
+                )]
+                fn remove<'a, 'async_trait>(
+                    &'a self,
+                    uid: String,
+                ) -> ::core::pin::Pin<
+                    Box<
+                        dyn ::core::future::Future<
+                            Output = Returns<()>,
+                        > + ::core::marker::Send + 'async_trait,
+                    >,
+                >
+                where
+                    'a: 'async_trait,
+                    Self: 'async_trait,
+                {
+                    Box::pin(async move {
+                        if let ::core::option::Option::Some(__ret) = ::core::option::Option::None::<
+                            Returns<()>,
+                        > {
+                            #[allow(unreachable_code)] return __ret;
+                        }
+                        let __self = self;
+                        let uid = uid;
+                        let __ret: Returns<()> = {
+                            __self.cache.remove(&uid).await;
+                            Ok(())
+                        };
+                        #[allow(unreachable_code)] __ret
+                    })
+                }
+            }
+        }
         pub mod mongodb {
             use async_trait::async_trait;
             use futures::StreamExt;
             use mongodb::{Client, Collection, bson::doc};
             use serde::{Deserialize, Serialize};
+            use tokio::spawn;
             use crate::{
-                auth::authserver::AuthServer, server::DBCONF,
+                auth::authserver::AuthServer, server::DECRYPTED_CONFIG,
                 structs::{db::AuthDbConfig, error::Returns},
             };
             pub struct UserOrAuthToken {
@@ -5932,7 +5691,11 @@ pub mod auth {
             }
             impl MongodbClient {
                 pub async fn new() -> Self {
-                    let AuthDbConfig::Mongodb { url } = &DBCONF.authdb else {
+                    let AuthDbConfig::Mongodb { url } = &DECRYPTED_CONFIG
+                        .read()
+                        .await
+                        .database
+                        .authdb else {
                         ::core::panicking::panic(
                             "internal error: entered unreachable code",
                         )
@@ -5982,21 +5745,20 @@ pub mod auth {
                         let __self = self;
                         let __ret: Returns<Option<String>> = {
                             let auth_hash = __self.auth_hash.clone();
+                            let doc = {
+                                let mut object = ::bson::Document::new();
+                                object
+                                    .insert::<
+                                        _,
+                                        ::bson::Bson,
+                                    >(
+                                        ("_id"),
+                                        <_ as ::std::convert::Into<::bson::Bson>>::into(uid),
+                                    );
+                                object
+                            };
                             tokio::spawn(async move {
-                                    let out = auth_hash
-                                        .find_one({
-                                            let mut object = ::bson::Document::new();
-                                            object
-                                                .insert::<
-                                                    _,
-                                                    ::bson::Bson,
-                                                >(
-                                                    ("_id"),
-                                                    <_ as ::std::convert::Into<::bson::Bson>>::into(uid),
-                                                );
-                                            object
-                                        })
-                                        .await?;
+                                    let out = auth_hash.find_one(doc).await?;
                                     Ok(out.map(|u| u.hash))
                                 })
                                 .await?
@@ -6274,8 +6036,7 @@ pub mod auth {
                         let __ret: Returns<()> = {
                             let auth_hash = __self.auth_hash.clone();
                             spawn(async move {
-                                    __self
-                                        .auth_hash
+                                    auth_hash
                                         .delete_one({
                                             let mut object = ::bson::Document::new();
                                             object
@@ -6300,13 +6061,14 @@ pub mod auth {
         }
         pub mod tikv {
             use async_trait::async_trait;
+            use log::*;
             use std::{path::PathBuf, str::FromStr, time::Duration};
             use tikv_client::{
                 BoundRange, Config, Error, Key, RawClient, TransactionClient,
             };
             use tokio::time::sleep;
             use crate::{
-                auth::authserver::AuthServer, server::DBCONF,
+                auth::authserver::AuthServer, server::DECRYPTED_CONFIG,
                 structs::{db::AuthDbConfig, error::{Returns, ServerError}},
             };
             pub struct TikvClient {
@@ -6316,10 +6078,30 @@ pub mod auth {
             impl TikvClient {
                 pub async fn new() -> Self {
                     {
-                        ::std::io::_print(format_args!("Connecting to database\n"));
+                        {
+                            let lvl = ::log::Level::Info;
+                            if lvl <= ::log::STATIC_MAX_LEVEL
+                                && lvl <= ::log::max_level()
+                            {
+                                ::log::__private_api::log(
+                                    { ::log::__private_api::GlobalLogger },
+                                    format_args!("Connecting to TiKV Database"),
+                                    lvl,
+                                    &(
+                                        "ahqai_server::auth::authserver::tikv",
+                                        "ahqai_server::auth::authserver::tikv",
+                                        ::log::__private_api::loc(),
+                                    ),
+                                    (),
+                                );
+                            }
+                        }
                     };
                     let mut config = Config::default();
-                    let AuthDbConfig::Tikv { endpoints, tls_config, timeout_secs } = &DBCONF
+                    let AuthDbConfig::Tikv { endpoints, tls_config, timeout_secs } = &DECRYPTED_CONFIG
+                        .read()
+                        .await
+                        .database
                         .authdb else {
                         {
                             ::core::panicking::panic_fmt(
@@ -6847,7 +6629,7 @@ pub mod auth {
             use async_trait::async_trait;
             use redis::{AsyncTypedCommands, Client, aio::MultiplexedConnection};
             use crate::{
-                auth::cache::AsyncCaching, server::DBCONF,
+                auth::cache::AsyncCaching, server::DECRYPTED_CONFIG,
                 structs::{db::CacheConfig, error::Returns},
             };
             pub struct RedisSessions {
@@ -6856,12 +6638,16 @@ pub mod auth {
             }
             impl RedisSessions {
                 pub async fn new() -> Self {
-                    let CacheConfig::Redis { url } = DBCONF.cache else {
+                    let CacheConfig::Redis { url } = &DECRYPTED_CONFIG
+                        .read()
+                        .await
+                        .database
+                        .cache else {
                         ::core::panicking::panic(
                             "internal error: entered unreachable code",
                         )
                     };
-                    let redis = Client::open(url)
+                    let redis = Client::open(url as &str)
                         .expect("Failed to initialize redis connection");
                     let conn = redis
                         .get_multiplexed_async_connection()
@@ -6910,7 +6696,7 @@ pub mod auth {
                         }
                         let __self = self;
                         let __ret: Returns<Option<String>> = {
-                            Ok(__self.conn.get(key).await?)
+                            Ok(__self.conn.clone().get(key).await?)
                         };
                         #[allow(unreachable_code)] __ret
                     })
@@ -6952,7 +6738,11 @@ pub mod auth {
                         let __self = self;
                         let value = value;
                         let __ret: Returns<()> = {
-                            __self.conn.set_ex(key, value, THIRTY_DAYS_IN_SECS).await?;
+                            __self
+                                .conn
+                                .clone()
+                                .set_ex(key, value, THIRTY_DAYS_IN_SECS)
+                                .await?;
                             Ok(())
                         };
                         #[allow(unreachable_code)] __ret
@@ -7031,13 +6821,38 @@ pub mod auth {
         pub async fn create() -> Self {
             let accounts: Box<dyn AuthServer + Send + Sync>;
             let sessions: Box<dyn AsyncCaching + Send + Sync>;
-            match &DBCONF.authdb {
+            match &CONFIG.database.authdb {
+                AuthDbConfig::Moka {} => {
+                    {
+                        {
+                            let lvl = ::log::Level::Warn;
+                            if lvl <= ::log::STATIC_MAX_LEVEL
+                                && lvl <= ::log::max_level()
+                            {
+                                ::log::__private_api::log(
+                                    { ::log::__private_api::GlobalLogger },
+                                    format_args!(
+                                        "CRITICAL WARNING! YOU ARE USING MOKA DB WHICH NEITHER HAS PERSISTENCE NOR IS RECOMMENDED FOR PRODUCTION IN ANY MEANS. PLEASE SHIFT TO A MORE ROBUST DB IMPLEMENTATION LIKE MONGODB OR TIKV FOR EVEN A HOBBY SERVER.",
+                                    ),
+                                    lvl,
+                                    &(
+                                        "ahqai_server::auth",
+                                        "ahqai_server::auth",
+                                        ::log::__private_api::loc(),
+                                    ),
+                                    (),
+                                );
+                            }
+                        }
+                    };
+                    accounts = Box::new(MokaTestingDB::new());
+                }
                 AuthDbConfig::Mongodb { .. } => {
                     accounts = Box::new(MongodbClient::new().await);
                 }
                 AuthDbConfig::Tikv { .. } => accounts = Box::new(TikvClient::new().await),
             };
-            match &DBCONF.cache {
+            match &CONFIG.database.cache {
                 CacheConfig::Moka => sessions = Box::new(MokaSessions::new()),
                 CacheConfig::Redis { .. } => {
                     sessions = Box::new(RedisSessions::new().await);
@@ -7078,8 +6893,8 @@ pub mod auth {
             Ok(AccountCreateOutcome::Successful)
         }
         pub async fn add_token(&self) -> Returns<AccountCreateOutcome> {
-            let (key, (user, hash)) = gen_auth_token()?;
-            self.accounts.update(user.into_string(), hash.into_string()).await?;
+            let (key, (user, hash)) = gen_auth_token(self.agent).await?;
+            self.accounts.update(user, hash).await?;
             Ok(AccountCreateOutcome::SuccessfulOut(key))
         }
         pub async fn is_valid_token(&self, token: &str) -> Returns<AccountCheckOutcome> {
@@ -7163,14 +6978,23 @@ pub mod auth {
         'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V',
         'W', 'X', 'Y', 'Z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '/',
     ];
-    pub type Hashed = Box<str>;
-    pub fn gen_auth_token() -> Returns<(String, (Box<str>, Hashed))> {
+    pub type Hashed = String;
+    pub fn gen_uid() -> Returns<String> {
+        let mut rng = rand::rng();
+        let token = VALUES.choose_multiple(&mut rng, 32).collect::<String>();
+        Ok(token)
+    }
+    pub async fn gen_auth_token(
+        cpufarm: &HashingAgent,
+    ) -> Returns<(String, (String, Hashed))> {
         let mut rng = rand::rng();
         let token = VALUES.choose_multiple(&mut rng, 128).collect::<String>();
-        let token_key = VALUES
-            .choose_multiple(&mut rng, TOKEN_ID_LENGTH)
-            .collect::<Box<str>>();
-        let hashed = hash(&token, BCRYPT_COST)?.into_boxed_str();
+        let mut token_key = String::from("tok:");
+        token_key.extend(VALUES.choose_multiple(&mut rng, TOKEN_ID_LENGTH));
+        let hashed = cpufarm
+            .gen_hash(&token)
+            .await
+            .map_or_else(|| Err(ServerError::StringConvertErr), |x| Ok(x))?;
         let token_to_output = ::alloc::__export::must_use({
             ::alloc::fmt::format(format_args!("{0}.{1}", token_key, token))
         });
@@ -7188,18 +7012,16 @@ pub mod auth {
     }
 }
 pub(crate) mod structs {
-    use std::collections::HashSet;
+    use std::collections::HashMap;
+    use zeroize::{Zeroize, ZeroizeOnDrop};
     use serde::{Deserialize, Serialize};
     use serde_json::{from_str, to_string_pretty};
     use tokio::fs;
-    use crate::structs::error::Returns;
+    use crate::structs::{db::DatabaseConfig, error::Returns};
     pub mod db {
-        use std::fs;
+        use zeroize::{Zeroize, ZeroizeOnDrop};
         use serde::{Deserialize, Serialize};
-        use serde_json::from_str;
-        const VERSION: u16 = 1;
         pub struct DatabaseConfig {
-            pub version: u16,
             pub authdb: AuthDbConfig,
             pub cache: CacheConfig,
         }
@@ -7207,11 +7029,9 @@ pub(crate) mod structs {
         impl ::core::fmt::Debug for DatabaseConfig {
             #[inline]
             fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-                ::core::fmt::Formatter::debug_struct_field3_finish(
+                ::core::fmt::Formatter::debug_struct_field2_finish(
                     f,
                     "DatabaseConfig",
-                    "version",
-                    &self.version,
                     "authdb",
                     &self.authdb,
                     "cache",
@@ -7224,7 +7044,6 @@ pub(crate) mod structs {
             #[inline]
             fn clone(&self) -> DatabaseConfig {
                 DatabaseConfig {
-                    version: ::core::clone::Clone::clone(&self.version),
                     authdb: ::core::clone::Clone::clone(&self.authdb),
                     cache: ::core::clone::Clone::clone(&self.cache),
                 }
@@ -7235,7 +7054,6 @@ pub(crate) mod structs {
             #[inline]
             fn default() -> DatabaseConfig {
                 DatabaseConfig {
-                    version: ::core::default::Default::default(),
                     authdb: ::core::default::Default::default(),
                     cache: ::core::default::Default::default(),
                 }
@@ -7263,12 +7081,7 @@ pub(crate) mod structs {
                     let mut __serde_state = _serde::Serializer::serialize_struct(
                         __serializer,
                         "DatabaseConfig",
-                        false as usize + 1 + 1 + 1,
-                    )?;
-                    _serde::ser::SerializeStruct::serialize_field(
-                        &mut __serde_state,
-                        "version",
-                        &self.version,
+                        false as usize + 1 + 1,
                     )?;
                     _serde::ser::SerializeStruct::serialize_field(
                         &mut __serde_state,
@@ -7307,7 +7120,6 @@ pub(crate) mod structs {
                     enum __Field {
                         __field0,
                         __field1,
-                        __field2,
                         __ignore,
                     }
                     #[doc(hidden)]
@@ -7334,7 +7146,6 @@ pub(crate) mod structs {
                             match __value {
                                 0u64 => _serde::__private228::Ok(__Field::__field0),
                                 1u64 => _serde::__private228::Ok(__Field::__field1),
-                                2u64 => _serde::__private228::Ok(__Field::__field2),
                                 _ => _serde::__private228::Ok(__Field::__ignore),
                             }
                         }
@@ -7346,9 +7157,8 @@ pub(crate) mod structs {
                             __E: _serde::de::Error,
                         {
                             match __value {
-                                "version" => _serde::__private228::Ok(__Field::__field0),
-                                "authdb" => _serde::__private228::Ok(__Field::__field1),
-                                "cache" => _serde::__private228::Ok(__Field::__field2),
+                                "authdb" => _serde::__private228::Ok(__Field::__field0),
+                                "cache" => _serde::__private228::Ok(__Field::__field1),
                                 _ => _serde::__private228::Ok(__Field::__ignore),
                             }
                         }
@@ -7360,9 +7170,8 @@ pub(crate) mod structs {
                             __E: _serde::de::Error,
                         {
                             match __value {
-                                b"version" => _serde::__private228::Ok(__Field::__field0),
-                                b"authdb" => _serde::__private228::Ok(__Field::__field1),
-                                b"cache" => _serde::__private228::Ok(__Field::__field2),
+                                b"authdb" => _serde::__private228::Ok(__Field::__field0),
+                                b"cache" => _serde::__private228::Ok(__Field::__field1),
                                 _ => _serde::__private228::Ok(__Field::__ignore),
                             }
                         }
@@ -7408,48 +7217,34 @@ pub(crate) mod structs {
                             __A: _serde::de::SeqAccess<'de>,
                         {
                             let __field0 = match _serde::de::SeqAccess::next_element::<
-                                u16,
-                            >(&mut __seq)? {
-                                _serde::__private228::Some(__value) => __value,
-                                _serde::__private228::None => {
-                                    return _serde::__private228::Err(
-                                        _serde::de::Error::invalid_length(
-                                            0usize,
-                                            &"struct DatabaseConfig with 3 elements",
-                                        ),
-                                    );
-                                }
-                            };
-                            let __field1 = match _serde::de::SeqAccess::next_element::<
                                 AuthDbConfig,
                             >(&mut __seq)? {
                                 _serde::__private228::Some(__value) => __value,
                                 _serde::__private228::None => {
                                     return _serde::__private228::Err(
                                         _serde::de::Error::invalid_length(
-                                            1usize,
-                                            &"struct DatabaseConfig with 3 elements",
+                                            0usize,
+                                            &"struct DatabaseConfig with 2 elements",
                                         ),
                                     );
                                 }
                             };
-                            let __field2 = match _serde::de::SeqAccess::next_element::<
+                            let __field1 = match _serde::de::SeqAccess::next_element::<
                                 CacheConfig,
                             >(&mut __seq)? {
                                 _serde::__private228::Some(__value) => __value,
                                 _serde::__private228::None => {
                                     return _serde::__private228::Err(
                                         _serde::de::Error::invalid_length(
-                                            2usize,
-                                            &"struct DatabaseConfig with 3 elements",
+                                            1usize,
+                                            &"struct DatabaseConfig with 2 elements",
                                         ),
                                     );
                                 }
                             };
                             _serde::__private228::Ok(DatabaseConfig {
-                                version: __field0,
-                                authdb: __field1,
-                                cache: __field2,
+                                authdb: __field0,
+                                cache: __field1,
                             })
                         }
                         #[inline]
@@ -7460,11 +7255,10 @@ pub(crate) mod structs {
                         where
                             __A: _serde::de::MapAccess<'de>,
                         {
-                            let mut __field0: _serde::__private228::Option<u16> = _serde::__private228::None;
-                            let mut __field1: _serde::__private228::Option<
+                            let mut __field0: _serde::__private228::Option<
                                 AuthDbConfig,
                             > = _serde::__private228::None;
-                            let mut __field2: _serde::__private228::Option<
+                            let mut __field1: _serde::__private228::Option<
                                 CacheConfig,
                             > = _serde::__private228::None;
                             while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
@@ -7474,34 +7268,22 @@ pub(crate) mod structs {
                                     __Field::__field0 => {
                                         if _serde::__private228::Option::is_some(&__field0) {
                                             return _serde::__private228::Err(
-                                                <__A::Error as _serde::de::Error>::duplicate_field(
-                                                    "version",
-                                                ),
-                                            );
-                                        }
-                                        __field0 = _serde::__private228::Some(
-                                            _serde::de::MapAccess::next_value::<u16>(&mut __map)?,
-                                        );
-                                    }
-                                    __Field::__field1 => {
-                                        if _serde::__private228::Option::is_some(&__field1) {
-                                            return _serde::__private228::Err(
                                                 <__A::Error as _serde::de::Error>::duplicate_field("authdb"),
                                             );
                                         }
-                                        __field1 = _serde::__private228::Some(
+                                        __field0 = _serde::__private228::Some(
                                             _serde::de::MapAccess::next_value::<
                                                 AuthDbConfig,
                                             >(&mut __map)?,
                                         );
                                     }
-                                    __Field::__field2 => {
-                                        if _serde::__private228::Option::is_some(&__field2) {
+                                    __Field::__field1 => {
+                                        if _serde::__private228::Option::is_some(&__field1) {
                                             return _serde::__private228::Err(
                                                 <__A::Error as _serde::de::Error>::duplicate_field("cache"),
                                             );
                                         }
-                                        __field2 = _serde::__private228::Some(
+                                        __field1 = _serde::__private228::Some(
                                             _serde::de::MapAccess::next_value::<
                                                 CacheConfig,
                                             >(&mut __map)?,
@@ -7517,34 +7299,23 @@ pub(crate) mod structs {
                             let __field0 = match __field0 {
                                 _serde::__private228::Some(__field0) => __field0,
                                 _serde::__private228::None => {
-                                    _serde::__private228::de::missing_field("version")?
+                                    _serde::__private228::de::missing_field("authdb")?
                                 }
                             };
                             let __field1 = match __field1 {
                                 _serde::__private228::Some(__field1) => __field1,
                                 _serde::__private228::None => {
-                                    _serde::__private228::de::missing_field("authdb")?
-                                }
-                            };
-                            let __field2 = match __field2 {
-                                _serde::__private228::Some(__field2) => __field2,
-                                _serde::__private228::None => {
                                     _serde::__private228::de::missing_field("cache")?
                                 }
                             };
                             _serde::__private228::Ok(DatabaseConfig {
-                                version: __field0,
-                                authdb: __field1,
-                                cache: __field2,
+                                authdb: __field0,
+                                cache: __field1,
                             })
                         }
                     }
                     #[doc(hidden)]
-                    const FIELDS: &'static [&'static str] = &[
-                        "version",
-                        "authdb",
-                        "cache",
-                    ];
+                    const FIELDS: &'static [&'static str] = &["authdb", "cache"];
                     _serde::Deserializer::deserialize_struct(
                         __deserializer,
                         "DatabaseConfig",
@@ -7557,8 +7328,38 @@ pub(crate) mod structs {
                 }
             }
         };
+        impl ::zeroize::Zeroize for DatabaseConfig {
+            fn zeroize(&mut self) {
+                match self {
+                    #[allow(unused_variables)]
+                    DatabaseConfig { authdb, cache } => {
+                        authdb.zeroize();
+                        cache.zeroize()
+                    }
+                    _ => {}
+                }
+            }
+        }
+        impl Drop for DatabaseConfig {
+            fn drop(&mut self) {
+                use ::zeroize::__internal::AssertZeroize;
+                use ::zeroize::__internal::AssertZeroizeOnDrop;
+                match self {
+                    #[allow(unused_variables)]
+                    DatabaseConfig { authdb, cache } => {
+                        authdb.zeroize_or_on_drop();
+                        cache.zeroize_or_on_drop()
+                    }
+                    _ => {}
+                }
+            }
+        }
+        #[doc(hidden)]
+        impl ::zeroize::ZeroizeOnDrop for DatabaseConfig {}
         #[serde(tag = "db")]
         pub enum AuthDbConfig {
+            #[serde(rename = "moka")]
+            Moka {},
             #[serde(rename = "mongodb")]
             Mongodb { url: Box<str> },
             #[serde(rename = "tikv")]
@@ -7574,6 +7375,7 @@ pub(crate) mod structs {
             #[inline]
             fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
                 match self {
+                    AuthDbConfig::Moka {} => ::core::fmt::Formatter::write_str(f, "Moka"),
                     AuthDbConfig::Mongodb { url: __self_0 } => {
                         ::core::fmt::Formatter::debug_struct_field1_finish(
                             f,
@@ -7606,6 +7408,7 @@ pub(crate) mod structs {
             #[inline]
             fn clone(&self) -> AuthDbConfig {
                 match self {
+                    AuthDbConfig::Moka {} => AuthDbConfig::Moka {},
                     AuthDbConfig::Mongodb { url: __self_0 } => {
                         AuthDbConfig::Mongodb {
                             url: ::core::clone::Clone::clone(__self_0),
@@ -7645,6 +7448,19 @@ pub(crate) mod structs {
                     __S: _serde::Serializer,
                 {
                     match *self {
+                        AuthDbConfig::Moka {} => {
+                            let mut __serde_state = _serde::Serializer::serialize_struct(
+                                __serializer,
+                                "AuthDbConfig",
+                                0 + 1,
+                            )?;
+                            _serde::ser::SerializeStruct::serialize_field(
+                                &mut __serde_state,
+                                "db",
+                                "moka",
+                            )?;
+                            _serde::ser::SerializeStruct::end(__serde_state)
+                        }
                         AuthDbConfig::Mongodb { ref url } => {
                             let mut __serde_state = _serde::Serializer::serialize_struct(
                                 __serializer,
@@ -7722,6 +7538,7 @@ pub(crate) mod structs {
                     enum __Field {
                         __field0,
                         __field1,
+                        __field2,
                     }
                     #[doc(hidden)]
                     struct __FieldVisitor;
@@ -7747,11 +7564,12 @@ pub(crate) mod structs {
                             match __value {
                                 0u64 => _serde::__private228::Ok(__Field::__field0),
                                 1u64 => _serde::__private228::Ok(__Field::__field1),
+                                2u64 => _serde::__private228::Ok(__Field::__field2),
                                 _ => {
                                     _serde::__private228::Err(
                                         _serde::de::Error::invalid_value(
                                             _serde::de::Unexpected::Unsigned(__value),
-                                            &"variant index 0 <= i < 2",
+                                            &"variant index 0 <= i < 3",
                                         ),
                                     )
                                 }
@@ -7765,8 +7583,9 @@ pub(crate) mod structs {
                             __E: _serde::de::Error,
                         {
                             match __value {
-                                "mongodb" => _serde::__private228::Ok(__Field::__field0),
-                                "tikv" => _serde::__private228::Ok(__Field::__field1),
+                                "moka" => _serde::__private228::Ok(__Field::__field0),
+                                "mongodb" => _serde::__private228::Ok(__Field::__field1),
+                                "tikv" => _serde::__private228::Ok(__Field::__field2),
                                 _ => {
                                     _serde::__private228::Err(
                                         _serde::de::Error::unknown_variant(__value, VARIANTS),
@@ -7782,8 +7601,9 @@ pub(crate) mod structs {
                             __E: _serde::de::Error,
                         {
                             match __value {
-                                b"mongodb" => _serde::__private228::Ok(__Field::__field0),
-                                b"tikv" => _serde::__private228::Ok(__Field::__field1),
+                                b"moka" => _serde::__private228::Ok(__Field::__field0),
+                                b"mongodb" => _serde::__private228::Ok(__Field::__field1),
+                                b"tikv" => _serde::__private228::Ok(__Field::__field2),
                                 _ => {
                                     let __value = &_serde::__private228::from_utf8_lossy(
                                         __value,
@@ -7811,7 +7631,11 @@ pub(crate) mod structs {
                         }
                     }
                     #[doc(hidden)]
-                    const VARIANTS: &'static [&'static str] = &["mongodb", "tikv"];
+                    const VARIANTS: &'static [&'static str] = &[
+                        "moka",
+                        "mongodb",
+                        "tikv",
+                    ];
                     let (__tag, __content) = _serde::Deserializer::deserialize_any(
                         __deserializer,
                         _serde::__private228::de::TaggedContentVisitor::<
@@ -7823,6 +7647,134 @@ pub(crate) mod structs {
                     >::new(__content);
                     match __tag {
                         __Field::__field0 => {
+                            #[allow(non_camel_case_types)]
+                            #[doc(hidden)]
+                            enum __Field {
+                                __ignore,
+                            }
+                            #[doc(hidden)]
+                            struct __FieldVisitor;
+                            #[automatically_derived]
+                            impl<'de> _serde::de::Visitor<'de> for __FieldVisitor {
+                                type Value = __Field;
+                                fn expecting(
+                                    &self,
+                                    __formatter: &mut _serde::__private228::Formatter,
+                                ) -> _serde::__private228::fmt::Result {
+                                    _serde::__private228::Formatter::write_str(
+                                        __formatter,
+                                        "field identifier",
+                                    )
+                                }
+                                fn visit_u64<__E>(
+                                    self,
+                                    __value: u64,
+                                ) -> _serde::__private228::Result<Self::Value, __E>
+                                where
+                                    __E: _serde::de::Error,
+                                {
+                                    match __value {
+                                        _ => _serde::__private228::Ok(__Field::__ignore),
+                                    }
+                                }
+                                fn visit_str<__E>(
+                                    self,
+                                    __value: &str,
+                                ) -> _serde::__private228::Result<Self::Value, __E>
+                                where
+                                    __E: _serde::de::Error,
+                                {
+                                    match __value {
+                                        _ => _serde::__private228::Ok(__Field::__ignore),
+                                    }
+                                }
+                                fn visit_bytes<__E>(
+                                    self,
+                                    __value: &[u8],
+                                ) -> _serde::__private228::Result<Self::Value, __E>
+                                where
+                                    __E: _serde::de::Error,
+                                {
+                                    match __value {
+                                        _ => _serde::__private228::Ok(__Field::__ignore),
+                                    }
+                                }
+                            }
+                            #[automatically_derived]
+                            impl<'de> _serde::Deserialize<'de> for __Field {
+                                #[inline]
+                                fn deserialize<__D>(
+                                    __deserializer: __D,
+                                ) -> _serde::__private228::Result<Self, __D::Error>
+                                where
+                                    __D: _serde::Deserializer<'de>,
+                                {
+                                    _serde::Deserializer::deserialize_identifier(
+                                        __deserializer,
+                                        __FieldVisitor,
+                                    )
+                                }
+                            }
+                            #[doc(hidden)]
+                            struct __Visitor<'de> {
+                                marker: _serde::__private228::PhantomData<AuthDbConfig>,
+                                lifetime: _serde::__private228::PhantomData<&'de ()>,
+                            }
+                            #[automatically_derived]
+                            impl<'de> _serde::de::Visitor<'de> for __Visitor<'de> {
+                                type Value = AuthDbConfig;
+                                fn expecting(
+                                    &self,
+                                    __formatter: &mut _serde::__private228::Formatter,
+                                ) -> _serde::__private228::fmt::Result {
+                                    _serde::__private228::Formatter::write_str(
+                                        __formatter,
+                                        "struct variant AuthDbConfig::Moka",
+                                    )
+                                }
+                                #[inline]
+                                fn visit_seq<__A>(
+                                    self,
+                                    _: __A,
+                                ) -> _serde::__private228::Result<Self::Value, __A::Error>
+                                where
+                                    __A: _serde::de::SeqAccess<'de>,
+                                {
+                                    _serde::__private228::Ok(AuthDbConfig::Moka {})
+                                }
+                                #[inline]
+                                fn visit_map<__A>(
+                                    self,
+                                    mut __map: __A,
+                                ) -> _serde::__private228::Result<Self::Value, __A::Error>
+                                where
+                                    __A: _serde::de::MapAccess<'de>,
+                                {
+                                    while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
+                                        __Field,
+                                    >(&mut __map)? {
+                                        match __key {
+                                            _ => {
+                                                let _ = _serde::de::MapAccess::next_value::<
+                                                    _serde::de::IgnoredAny,
+                                                >(&mut __map)?;
+                                            }
+                                        }
+                                    }
+                                    _serde::__private228::Ok(AuthDbConfig::Moka {})
+                                }
+                            }
+                            #[doc(hidden)]
+                            const FIELDS: &'static [&'static str] = &[];
+                            _serde::Deserializer::deserialize_any(
+                                __deserializer,
+                                __Visitor {
+                                    marker: _serde::__private228::PhantomData::<AuthDbConfig>,
+                                    lifetime: _serde::__private228::PhantomData,
+                                },
+                            )
+                        }
+                        __Field::__field1 => {
                             #[allow(non_camel_case_types)]
                             #[doc(hidden)]
                             enum __Field {
@@ -7988,7 +7940,7 @@ pub(crate) mod structs {
                                 },
                             )
                         }
-                        __Field::__field1 => {
+                        __Field::__field2 => {
                             #[allow(non_camel_case_types)]
                             #[doc(hidden)]
                             enum __Field {
@@ -8243,6 +8195,44 @@ pub(crate) mod structs {
                 }
             }
         };
+        impl ::zeroize::Zeroize for AuthDbConfig {
+            fn zeroize(&mut self) {
+                match self {
+                    #[allow(unused_variables)]
+                    AuthDbConfig::Moka {} => {}
+                    #[allow(unused_variables)]
+                    AuthDbConfig::Mongodb { url } => url.zeroize(),
+                    #[allow(unused_variables)]
+                    AuthDbConfig::Tikv { endpoints, tls_config, timeout_secs } => {
+                        endpoints.zeroize();
+                        tls_config.zeroize();
+                        timeout_secs.zeroize()
+                    }
+                    _ => {}
+                }
+            }
+        }
+        impl Drop for AuthDbConfig {
+            fn drop(&mut self) {
+                use ::zeroize::__internal::AssertZeroize;
+                use ::zeroize::__internal::AssertZeroizeOnDrop;
+                match self {
+                    #[allow(unused_variables)]
+                    AuthDbConfig::Moka {} => {}
+                    #[allow(unused_variables)]
+                    AuthDbConfig::Mongodb { url } => url.zeroize_or_on_drop(),
+                    #[allow(unused_variables)]
+                    AuthDbConfig::Tikv { endpoints, tls_config, timeout_secs } => {
+                        endpoints.zeroize_or_on_drop();
+                        tls_config.zeroize_or_on_drop();
+                        timeout_secs.zeroize_or_on_drop()
+                    }
+                    _ => {}
+                }
+            }
+        }
+        #[doc(hidden)]
+        impl ::zeroize::ZeroizeOnDrop for AuthDbConfig {}
         fn def_timeout() -> u64 {
             10
         }
@@ -8650,6 +8640,32 @@ pub(crate) mod structs {
                 }
             }
         };
+        impl ::zeroize::Zeroize for CacheConfig {
+            fn zeroize(&mut self) {
+                match self {
+                    #[allow(unused_variables)]
+                    CacheConfig::Moka => {}
+                    #[allow(unused_variables)]
+                    CacheConfig::Redis { url } => url.zeroize(),
+                    _ => {}
+                }
+            }
+        }
+        impl Drop for CacheConfig {
+            fn drop(&mut self) {
+                use ::zeroize::__internal::AssertZeroize;
+                use ::zeroize::__internal::AssertZeroizeOnDrop;
+                match self {
+                    #[allow(unused_variables)]
+                    CacheConfig::Moka => {}
+                    #[allow(unused_variables)]
+                    CacheConfig::Redis { url } => url.zeroize_or_on_drop(),
+                    _ => {}
+                }
+            }
+        }
+        #[doc(hidden)]
+        impl ::zeroize::ZeroizeOnDrop for CacheConfig {}
         impl Default for AuthDbConfig {
             fn default() -> Self {
                 Self::Mongodb {
@@ -9012,37 +9028,45 @@ pub(crate) mod structs {
                 }
             }
         };
-        impl DatabaseConfig {
-            /// This is a panicking method as it should immediately crash the server
-            pub fn get() -> Self {
-                let data = fs::read_to_string("./database_conf.json")
-                    .expect("Unable to get Database Config");
-                let out: Self = from_str(&data)
-                    .expect(
-                        "Unable to parse your JSON Database Config. Make sure it is correct",
-                    );
-                if out.version != VERSION {
-                    {
-                        ::core::panicking::panic_fmt(
-                            format_args!(
-                                "❌ Database Config version mismatch:\n         Expected version {1}, found {0}.\n         Please migrate your configuration file to match the current schema.",
-                                out.version,
-                                VERSION,
-                            ),
-                        );
-                    };
+        impl ::zeroize::Zeroize for TlsConfig {
+            fn zeroize(&mut self) {
+                match self {
+                    #[allow(unused_variables)]
+                    TlsConfig { ca_path, cert_path, key_path } => {
+                        ca_path.zeroize();
+                        cert_path.zeroize();
+                        key_path.zeroize()
+                    }
+                    _ => {}
                 }
-                out
             }
         }
+        impl Drop for TlsConfig {
+            fn drop(&mut self) {
+                use ::zeroize::__internal::AssertZeroize;
+                use ::zeroize::__internal::AssertZeroizeOnDrop;
+                match self {
+                    #[allow(unused_variables)]
+                    TlsConfig { ca_path, cert_path, key_path } => {
+                        ca_path.zeroize_or_on_drop();
+                        cert_path.zeroize_or_on_drop();
+                        key_path.zeroize_or_on_drop()
+                    }
+                    _ => {}
+                }
+            }
+        }
+        #[doc(hidden)]
+        impl ::zeroize::ZeroizeOnDrop for TlsConfig {}
     }
     pub mod error {
         use actix_web::http::StatusCode;
         use base64::DecodeError;
         use mongodb::error::Error as MongoDBError;
+        use rand::rand_core::OsError;
         use redis::RedisError;
         use thiserror::Error;
-        use bcrypt::BcryptError;
+        use argon2::password_hash::Error as ArgonErr;
         use serde_json::Error as SerdeError;
         use std::io::Error as StdError;
         use tikv_client::Error as TikvError;
@@ -9066,8 +9090,10 @@ pub(crate) mod structs {
             StringConvertErr,
             #[error("Tried to retry many times but failed")]
             RetryFailed,
+            #[error("Argon Hashing Error")]
+            ArgonErr(ArgonErr),
             #[error(transparent)]
-            BcryptErr(#[from] BcryptError),
+            RngErr(#[from] OsError),
         }
         #[automatically_derived]
         impl ::core::fmt::Debug for ServerError {
@@ -9129,10 +9155,17 @@ pub(crate) mod structs {
                     ServerError::RetryFailed => {
                         ::core::fmt::Formatter::write_str(f, "RetryFailed")
                     }
-                    ServerError::BcryptErr(__self_0) => {
+                    ServerError::ArgonErr(__self_0) => {
                         ::core::fmt::Formatter::debug_tuple_field1_finish(
                             f,
-                            "BcryptErr",
+                            "ArgonErr",
+                            &__self_0,
+                        )
+                    }
+                    ServerError::RngErr(__self_0) => {
+                        ::core::fmt::Formatter::debug_tuple_field1_finish(
+                            f,
+                            "RngErr",
                             &__self_0,
                         )
                     }
@@ -9187,7 +9220,8 @@ pub(crate) mod structs {
                     }
                     ServerError::StringConvertErr { .. } => ::core::option::Option::None,
                     ServerError::RetryFailed { .. } => ::core::option::Option::None,
-                    ServerError::BcryptErr { 0: transparent } => {
+                    ServerError::ArgonErr { .. } => ::core::option::Option::None,
+                    ServerError::RngErr { 0: transparent } => {
                         ::thiserror::__private17::Error::source(
                             transparent.as_dyn_error(),
                         )
@@ -9223,9 +9257,10 @@ pub(crate) mod structs {
                     ServerError::RetryFailed {} => {
                         __formatter.write_str("Tried to retry many times but failed")
                     }
-                    ServerError::BcryptErr(_0) => {
-                        ::core::fmt::Display::fmt(_0, __formatter)
+                    ServerError::ArgonErr(_0) => {
+                        __formatter.write_str("Argon Hashing Error")
                     }
+                    ServerError::RngErr(_0) => ::core::fmt::Display::fmt(_0, __formatter),
                 }
             }
         }
@@ -9324,11 +9359,9 @@ pub(crate) mod structs {
             clippy::needless_lifetimes,
         )]
         #[automatically_derived]
-        impl ::core::convert::From<BcryptError> for ServerError {
-            fn from(source: BcryptError) -> Self {
-                ServerError::BcryptErr {
-                    0: source,
-                }
+        impl ::core::convert::From<OsError> for ServerError {
+            fn from(source: OsError) -> Self {
+                ServerError::RngErr { 0: source }
             }
         }
         impl actix_web::error::ResponseError for ServerError {
@@ -9338,28 +9371,41 @@ pub(crate) mod structs {
         }
         pub type Returns<T> = Result<T, ServerError>;
     }
+    const VERSION: u16 = 1;
     pub struct Config {
+        pub version: u16,
         #[serde(default = "def_bind")]
         pub binds: Vec<(String, u16)>,
         pub admin_pass_hash: Option<String>,
-        pub ollama: OllamaConfiguration,
+        pub llama: LlamaConfiguration,
         pub authentication: Authentication,
+        pub database: DatabaseConfig,
     }
     #[automatically_derived]
     impl ::core::fmt::Debug for Config {
         #[inline]
         fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-            ::core::fmt::Formatter::debug_struct_field4_finish(
+            let names: &'static _ = &[
+                "version",
+                "binds",
+                "admin_pass_hash",
+                "llama",
+                "authentication",
+                "database",
+            ];
+            let values: &[&dyn ::core::fmt::Debug] = &[
+                &self.version,
+                &self.binds,
+                &self.admin_pass_hash,
+                &self.llama,
+                &self.authentication,
+                &&self.database,
+            ];
+            ::core::fmt::Formatter::debug_struct_fields_finish(
                 f,
                 "Config",
-                "binds",
-                &self.binds,
-                "admin_pass_hash",
-                &self.admin_pass_hash,
-                "ollama",
-                &self.ollama,
-                "authentication",
-                &&self.authentication,
+                names,
+                values,
             )
         }
     }
@@ -9368,10 +9414,12 @@ pub(crate) mod structs {
         #[inline]
         fn clone(&self) -> Config {
             Config {
+                version: ::core::clone::Clone::clone(&self.version),
                 binds: ::core::clone::Clone::clone(&self.binds),
                 admin_pass_hash: ::core::clone::Clone::clone(&self.admin_pass_hash),
-                ollama: ::core::clone::Clone::clone(&self.ollama),
+                llama: ::core::clone::Clone::clone(&self.llama),
                 authentication: ::core::clone::Clone::clone(&self.authentication),
+                database: ::core::clone::Clone::clone(&self.database),
             }
         }
     }
@@ -9397,7 +9445,12 @@ pub(crate) mod structs {
                 let mut __serde_state = _serde::Serializer::serialize_struct(
                     __serializer,
                     "Config",
-                    false as usize + 1 + 1 + 1 + 1,
+                    false as usize + 1 + 1 + 1 + 1 + 1 + 1,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "version",
+                    &self.version,
                 )?;
                 _serde::ser::SerializeStruct::serialize_field(
                     &mut __serde_state,
@@ -9411,13 +9464,18 @@ pub(crate) mod structs {
                 )?;
                 _serde::ser::SerializeStruct::serialize_field(
                     &mut __serde_state,
-                    "ollama",
-                    &self.ollama,
+                    "llama",
+                    &self.llama,
                 )?;
                 _serde::ser::SerializeStruct::serialize_field(
                     &mut __serde_state,
                     "authentication",
                     &self.authentication,
+                )?;
+                _serde::ser::SerializeStruct::serialize_field(
+                    &mut __serde_state,
+                    "database",
+                    &self.database,
                 )?;
                 _serde::ser::SerializeStruct::end(__serde_state)
             }
@@ -9448,6 +9506,8 @@ pub(crate) mod structs {
                     __field1,
                     __field2,
                     __field3,
+                    __field4,
+                    __field5,
                     __ignore,
                 }
                 #[doc(hidden)]
@@ -9476,6 +9536,8 @@ pub(crate) mod structs {
                             1u64 => _serde::__private228::Ok(__Field::__field1),
                             2u64 => _serde::__private228::Ok(__Field::__field2),
                             3u64 => _serde::__private228::Ok(__Field::__field3),
+                            4u64 => _serde::__private228::Ok(__Field::__field4),
+                            5u64 => _serde::__private228::Ok(__Field::__field5),
                             _ => _serde::__private228::Ok(__Field::__ignore),
                         }
                     }
@@ -9487,14 +9549,16 @@ pub(crate) mod structs {
                         __E: _serde::de::Error,
                     {
                         match __value {
-                            "binds" => _serde::__private228::Ok(__Field::__field0),
+                            "version" => _serde::__private228::Ok(__Field::__field0),
+                            "binds" => _serde::__private228::Ok(__Field::__field1),
                             "admin_pass_hash" => {
-                                _serde::__private228::Ok(__Field::__field1)
+                                _serde::__private228::Ok(__Field::__field2)
                             }
-                            "ollama" => _serde::__private228::Ok(__Field::__field2),
+                            "llama" => _serde::__private228::Ok(__Field::__field3),
                             "authentication" => {
-                                _serde::__private228::Ok(__Field::__field3)
+                                _serde::__private228::Ok(__Field::__field4)
                             }
+                            "database" => _serde::__private228::Ok(__Field::__field5),
                             _ => _serde::__private228::Ok(__Field::__ignore),
                         }
                     }
@@ -9506,14 +9570,16 @@ pub(crate) mod structs {
                         __E: _serde::de::Error,
                     {
                         match __value {
-                            b"binds" => _serde::__private228::Ok(__Field::__field0),
+                            b"version" => _serde::__private228::Ok(__Field::__field0),
+                            b"binds" => _serde::__private228::Ok(__Field::__field1),
                             b"admin_pass_hash" => {
-                                _serde::__private228::Ok(__Field::__field1)
+                                _serde::__private228::Ok(__Field::__field2)
                             }
-                            b"ollama" => _serde::__private228::Ok(__Field::__field2),
+                            b"llama" => _serde::__private228::Ok(__Field::__field3),
                             b"authentication" => {
-                                _serde::__private228::Ok(__Field::__field3)
+                                _serde::__private228::Ok(__Field::__field4)
                             }
+                            b"database" => _serde::__private228::Ok(__Field::__field5),
                             _ => _serde::__private228::Ok(__Field::__ignore),
                         }
                     }
@@ -9559,55 +9625,83 @@ pub(crate) mod structs {
                         __A: _serde::de::SeqAccess<'de>,
                     {
                         let __field0 = match _serde::de::SeqAccess::next_element::<
+                            u16,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        0usize,
+                                        &"struct Config with 6 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field1 = match _serde::de::SeqAccess::next_element::<
                             Vec<(String, u16)>,
                         >(&mut __seq)? {
                             _serde::__private228::Some(__value) => __value,
                             _serde::__private228::None => def_bind(),
                         };
-                        let __field1 = match _serde::de::SeqAccess::next_element::<
+                        let __field2 = match _serde::de::SeqAccess::next_element::<
                             Option<String>,
                         >(&mut __seq)? {
                             _serde::__private228::Some(__value) => __value,
                             _serde::__private228::None => {
                                 return _serde::__private228::Err(
                                     _serde::de::Error::invalid_length(
-                                        1usize,
-                                        &"struct Config with 4 elements",
-                                    ),
-                                );
-                            }
-                        };
-                        let __field2 = match _serde::de::SeqAccess::next_element::<
-                            OllamaConfiguration,
-                        >(&mut __seq)? {
-                            _serde::__private228::Some(__value) => __value,
-                            _serde::__private228::None => {
-                                return _serde::__private228::Err(
-                                    _serde::de::Error::invalid_length(
                                         2usize,
-                                        &"struct Config with 4 elements",
+                                        &"struct Config with 6 elements",
                                     ),
                                 );
                             }
                         };
                         let __field3 = match _serde::de::SeqAccess::next_element::<
-                            Authentication,
+                            LlamaConfiguration,
                         >(&mut __seq)? {
                             _serde::__private228::Some(__value) => __value,
                             _serde::__private228::None => {
                                 return _serde::__private228::Err(
                                     _serde::de::Error::invalid_length(
                                         3usize,
-                                        &"struct Config with 4 elements",
+                                        &"struct Config with 6 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field4 = match _serde::de::SeqAccess::next_element::<
+                            Authentication,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        4usize,
+                                        &"struct Config with 6 elements",
+                                    ),
+                                );
+                            }
+                        };
+                        let __field5 = match _serde::de::SeqAccess::next_element::<
+                            DatabaseConfig,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        5usize,
+                                        &"struct Config with 6 elements",
                                     ),
                                 );
                             }
                         };
                         _serde::__private228::Ok(Config {
-                            binds: __field0,
-                            admin_pass_hash: __field1,
-                            ollama: __field2,
-                            authentication: __field3,
+                            version: __field0,
+                            binds: __field1,
+                            admin_pass_hash: __field2,
+                            llama: __field3,
+                            authentication: __field4,
+                            database: __field5,
                         })
                     }
                     #[inline]
@@ -9618,14 +9712,16 @@ pub(crate) mod structs {
                     where
                         __A: _serde::de::MapAccess<'de>,
                     {
-                        let mut __field0: _serde::__private228::Option<
+                        let mut __field0: _serde::__private228::Option<u16> = _serde::__private228::None;
+                        let mut __field1: _serde::__private228::Option<
                             Vec<(String, u16)>,
                         > = _serde::__private228::None;
-                        let mut __field1: _serde::__private228::Option<Option<String>> = _serde::__private228::None;
-                        let mut __field2: _serde::__private228::Option<
-                            OllamaConfiguration,
+                        let mut __field2: _serde::__private228::Option<Option<String>> = _serde::__private228::None;
+                        let mut __field3: _serde::__private228::Option<
+                            LlamaConfiguration,
                         > = _serde::__private228::None;
-                        let mut __field3: _serde::__private228::Option<Authentication> = _serde::__private228::None;
+                        let mut __field4: _serde::__private228::Option<Authentication> = _serde::__private228::None;
+                        let mut __field5: _serde::__private228::Option<DatabaseConfig> = _serde::__private228::None;
                         while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
                             __Field,
                         >(&mut __map)? {
@@ -9633,52 +9729,78 @@ pub(crate) mod structs {
                                 __Field::__field0 => {
                                     if _serde::__private228::Option::is_some(&__field0) {
                                         return _serde::__private228::Err(
-                                            <__A::Error as _serde::de::Error>::duplicate_field("binds"),
+                                            <__A::Error as _serde::de::Error>::duplicate_field(
+                                                "version",
+                                            ),
                                         );
                                     }
                                     __field0 = _serde::__private228::Some(
-                                        _serde::de::MapAccess::next_value::<
-                                            Vec<(String, u16)>,
-                                        >(&mut __map)?,
+                                        _serde::de::MapAccess::next_value::<u16>(&mut __map)?,
                                     );
                                 }
                                 __Field::__field1 => {
                                     if _serde::__private228::Option::is_some(&__field1) {
                                         return _serde::__private228::Err(
-                                            <__A::Error as _serde::de::Error>::duplicate_field(
-                                                "admin_pass_hash",
-                                            ),
+                                            <__A::Error as _serde::de::Error>::duplicate_field("binds"),
                                         );
                                     }
                                     __field1 = _serde::__private228::Some(
                                         _serde::de::MapAccess::next_value::<
-                                            Option<String>,
+                                            Vec<(String, u16)>,
                                         >(&mut __map)?,
                                     );
                                 }
                                 __Field::__field2 => {
                                     if _serde::__private228::Option::is_some(&__field2) {
                                         return _serde::__private228::Err(
-                                            <__A::Error as _serde::de::Error>::duplicate_field("ollama"),
+                                            <__A::Error as _serde::de::Error>::duplicate_field(
+                                                "admin_pass_hash",
+                                            ),
                                         );
                                     }
                                     __field2 = _serde::__private228::Some(
                                         _serde::de::MapAccess::next_value::<
-                                            OllamaConfiguration,
+                                            Option<String>,
                                         >(&mut __map)?,
                                     );
                                 }
                                 __Field::__field3 => {
                                     if _serde::__private228::Option::is_some(&__field3) {
                                         return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field("llama"),
+                                        );
+                                    }
+                                    __field3 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<
+                                            LlamaConfiguration,
+                                        >(&mut __map)?,
+                                    );
+                                }
+                                __Field::__field4 => {
+                                    if _serde::__private228::Option::is_some(&__field4) {
+                                        return _serde::__private228::Err(
                                             <__A::Error as _serde::de::Error>::duplicate_field(
                                                 "authentication",
                                             ),
                                         );
                                     }
-                                    __field3 = _serde::__private228::Some(
+                                    __field4 = _serde::__private228::Some(
                                         _serde::de::MapAccess::next_value::<
                                             Authentication,
+                                        >(&mut __map)?,
+                                    );
+                                }
+                                __Field::__field5 => {
+                                    if _serde::__private228::Option::is_some(&__field5) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field(
+                                                "database",
+                                            ),
+                                        );
+                                    }
+                                    __field5 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<
+                                            DatabaseConfig,
                                         >(&mut __map)?,
                                     );
                                 }
@@ -9691,40 +9813,56 @@ pub(crate) mod structs {
                         }
                         let __field0 = match __field0 {
                             _serde::__private228::Some(__field0) => __field0,
-                            _serde::__private228::None => def_bind(),
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("version")?
+                            }
                         };
                         let __field1 = match __field1 {
                             _serde::__private228::Some(__field1) => __field1,
-                            _serde::__private228::None => {
-                                _serde::__private228::de::missing_field("admin_pass_hash")?
-                            }
+                            _serde::__private228::None => def_bind(),
                         };
                         let __field2 = match __field2 {
                             _serde::__private228::Some(__field2) => __field2,
                             _serde::__private228::None => {
-                                _serde::__private228::de::missing_field("ollama")?
+                                _serde::__private228::de::missing_field("admin_pass_hash")?
                             }
                         };
                         let __field3 = match __field3 {
                             _serde::__private228::Some(__field3) => __field3,
                             _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("llama")?
+                            }
+                        };
+                        let __field4 = match __field4 {
+                            _serde::__private228::Some(__field4) => __field4,
+                            _serde::__private228::None => {
                                 _serde::__private228::de::missing_field("authentication")?
                             }
                         };
+                        let __field5 = match __field5 {
+                            _serde::__private228::Some(__field5) => __field5,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("database")?
+                            }
+                        };
                         _serde::__private228::Ok(Config {
-                            binds: __field0,
-                            admin_pass_hash: __field1,
-                            ollama: __field2,
-                            authentication: __field3,
+                            version: __field0,
+                            binds: __field1,
+                            admin_pass_hash: __field2,
+                            llama: __field3,
+                            authentication: __field4,
+                            database: __field5,
                         })
                     }
                 }
                 #[doc(hidden)]
                 const FIELDS: &'static [&'static str] = &[
+                    "version",
                     "binds",
                     "admin_pass_hash",
-                    "ollama",
+                    "llama",
                     "authentication",
+                    "database",
                 ];
                 _serde::Deserializer::deserialize_struct(
                     __deserializer,
@@ -9738,7 +9876,56 @@ pub(crate) mod structs {
             }
         }
     };
-    pub static BCRYPT_COST: u32 = 14;
+    impl ::zeroize::Zeroize for Config {
+        fn zeroize(&mut self) {
+            match self {
+                #[allow(unused_variables)]
+                Config {
+                    version,
+                    binds,
+                    admin_pass_hash,
+                    llama,
+                    authentication,
+                    database,
+                } => {
+                    version.zeroize();
+                    binds.zeroize();
+                    admin_pass_hash.zeroize();
+                    llama.zeroize();
+                    authentication.zeroize();
+                    database.zeroize()
+                }
+                _ => {}
+            }
+        }
+    }
+    impl Drop for Config {
+        fn drop(&mut self) {
+            use ::zeroize::__internal::AssertZeroize;
+            use ::zeroize::__internal::AssertZeroizeOnDrop;
+            match self {
+                #[allow(unused_variables)]
+                Config {
+                    version,
+                    binds,
+                    admin_pass_hash,
+                    llama,
+                    authentication,
+                    database,
+                } => {
+                    version.zeroize_or_on_drop();
+                    binds.zeroize_or_on_drop();
+                    admin_pass_hash.zeroize_or_on_drop();
+                    llama.zeroize_or_on_drop();
+                    authentication.zeroize_or_on_drop();
+                    database.zeroize_or_on_drop()
+                }
+                _ => {}
+            }
+        }
+    }
+    #[doc(hidden)]
+    impl ::zeroize::ZeroizeOnDrop for Config {}
     fn def_bind() -> Vec<(String, u16)> {
         <[_]>::into_vec(
             ::alloc::boxed::box_new([
@@ -9747,43 +9934,27 @@ pub(crate) mod structs {
             ]),
         )
     }
-    pub struct OllamaConfiguration {
-        pub host: Box<str>,
-        pub port: u16,
-        pub msgs: usize,
-        pub cvmodels: HashSet<Box<str>>,
-        pub txtmodels: HashSet<Box<str>>,
+    pub struct LlamaConfiguration {
+        pub models: HashMap<Box<str>, LlamaServer>,
     }
     #[automatically_derived]
-    impl ::core::fmt::Debug for OllamaConfiguration {
+    impl ::core::fmt::Debug for LlamaConfiguration {
         #[inline]
         fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-            ::core::fmt::Formatter::debug_struct_field5_finish(
+            ::core::fmt::Formatter::debug_struct_field1_finish(
                 f,
-                "OllamaConfiguration",
-                "host",
-                &self.host,
-                "port",
-                &self.port,
-                "msgs",
-                &self.msgs,
-                "cvmodels",
-                &self.cvmodels,
-                "txtmodels",
-                &&self.txtmodels,
+                "LlamaConfiguration",
+                "models",
+                &&self.models,
             )
         }
     }
     #[automatically_derived]
-    impl ::core::clone::Clone for OllamaConfiguration {
+    impl ::core::clone::Clone for LlamaConfiguration {
         #[inline]
-        fn clone(&self) -> OllamaConfiguration {
-            OllamaConfiguration {
-                host: ::core::clone::Clone::clone(&self.host),
-                port: ::core::clone::Clone::clone(&self.port),
-                msgs: ::core::clone::Clone::clone(&self.msgs),
-                cvmodels: ::core::clone::Clone::clone(&self.cvmodels),
-                txtmodels: ::core::clone::Clone::clone(&self.txtmodels),
+        fn clone(&self) -> LlamaConfiguration {
+            LlamaConfiguration {
+                models: ::core::clone::Clone::clone(&self.models),
             }
         }
     }
@@ -9798,7 +9969,7 @@ pub(crate) mod structs {
         #[allow(unused_extern_crates, clippy::useless_attribute)]
         extern crate serde as _serde;
         #[automatically_derived]
-        impl _serde::Serialize for OllamaConfiguration {
+        impl _serde::Serialize for LlamaConfiguration {
             fn serialize<__S>(
                 &self,
                 __serializer: __S,
@@ -9808,33 +9979,308 @@ pub(crate) mod structs {
             {
                 let mut __serde_state = _serde::Serializer::serialize_struct(
                     __serializer,
-                    "OllamaConfiguration",
-                    false as usize + 1 + 1 + 1 + 1 + 1,
+                    "LlamaConfiguration",
+                    false as usize + 1,
                 )?;
                 _serde::ser::SerializeStruct::serialize_field(
                     &mut __serde_state,
-                    "host",
-                    &self.host,
+                    "models",
+                    &self.models,
+                )?;
+                _serde::ser::SerializeStruct::end(__serde_state)
+            }
+        }
+    };
+    #[automatically_derived]
+    impl ::core::default::Default for LlamaConfiguration {
+        #[inline]
+        fn default() -> LlamaConfiguration {
+            LlamaConfiguration {
+                models: ::core::default::Default::default(),
+            }
+        }
+    }
+    #[doc(hidden)]
+    #[allow(
+        non_upper_case_globals,
+        unused_attributes,
+        unused_qualifications,
+        clippy::absolute_paths,
+    )]
+    const _: () = {
+        #[allow(unused_extern_crates, clippy::useless_attribute)]
+        extern crate serde as _serde;
+        #[automatically_derived]
+        impl<'de> _serde::Deserialize<'de> for LlamaConfiguration {
+            fn deserialize<__D>(
+                __deserializer: __D,
+            ) -> _serde::__private228::Result<Self, __D::Error>
+            where
+                __D: _serde::Deserializer<'de>,
+            {
+                #[allow(non_camel_case_types)]
+                #[doc(hidden)]
+                enum __Field {
+                    __field0,
+                    __ignore,
+                }
+                #[doc(hidden)]
+                struct __FieldVisitor;
+                #[automatically_derived]
+                impl<'de> _serde::de::Visitor<'de> for __FieldVisitor {
+                    type Value = __Field;
+                    fn expecting(
+                        &self,
+                        __formatter: &mut _serde::__private228::Formatter,
+                    ) -> _serde::__private228::fmt::Result {
+                        _serde::__private228::Formatter::write_str(
+                            __formatter,
+                            "field identifier",
+                        )
+                    }
+                    fn visit_u64<__E>(
+                        self,
+                        __value: u64,
+                    ) -> _serde::__private228::Result<Self::Value, __E>
+                    where
+                        __E: _serde::de::Error,
+                    {
+                        match __value {
+                            0u64 => _serde::__private228::Ok(__Field::__field0),
+                            _ => _serde::__private228::Ok(__Field::__ignore),
+                        }
+                    }
+                    fn visit_str<__E>(
+                        self,
+                        __value: &str,
+                    ) -> _serde::__private228::Result<Self::Value, __E>
+                    where
+                        __E: _serde::de::Error,
+                    {
+                        match __value {
+                            "models" => _serde::__private228::Ok(__Field::__field0),
+                            _ => _serde::__private228::Ok(__Field::__ignore),
+                        }
+                    }
+                    fn visit_bytes<__E>(
+                        self,
+                        __value: &[u8],
+                    ) -> _serde::__private228::Result<Self::Value, __E>
+                    where
+                        __E: _serde::de::Error,
+                    {
+                        match __value {
+                            b"models" => _serde::__private228::Ok(__Field::__field0),
+                            _ => _serde::__private228::Ok(__Field::__ignore),
+                        }
+                    }
+                }
+                #[automatically_derived]
+                impl<'de> _serde::Deserialize<'de> for __Field {
+                    #[inline]
+                    fn deserialize<__D>(
+                        __deserializer: __D,
+                    ) -> _serde::__private228::Result<Self, __D::Error>
+                    where
+                        __D: _serde::Deserializer<'de>,
+                    {
+                        _serde::Deserializer::deserialize_identifier(
+                            __deserializer,
+                            __FieldVisitor,
+                        )
+                    }
+                }
+                #[doc(hidden)]
+                struct __Visitor<'de> {
+                    marker: _serde::__private228::PhantomData<LlamaConfiguration>,
+                    lifetime: _serde::__private228::PhantomData<&'de ()>,
+                }
+                #[automatically_derived]
+                impl<'de> _serde::de::Visitor<'de> for __Visitor<'de> {
+                    type Value = LlamaConfiguration;
+                    fn expecting(
+                        &self,
+                        __formatter: &mut _serde::__private228::Formatter,
+                    ) -> _serde::__private228::fmt::Result {
+                        _serde::__private228::Formatter::write_str(
+                            __formatter,
+                            "struct LlamaConfiguration",
+                        )
+                    }
+                    #[inline]
+                    fn visit_seq<__A>(
+                        self,
+                        mut __seq: __A,
+                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
+                    where
+                        __A: _serde::de::SeqAccess<'de>,
+                    {
+                        let __field0 = match _serde::de::SeqAccess::next_element::<
+                            HashMap<Box<str>, LlamaServer>,
+                        >(&mut __seq)? {
+                            _serde::__private228::Some(__value) => __value,
+                            _serde::__private228::None => {
+                                return _serde::__private228::Err(
+                                    _serde::de::Error::invalid_length(
+                                        0usize,
+                                        &"struct LlamaConfiguration with 1 element",
+                                    ),
+                                );
+                            }
+                        };
+                        _serde::__private228::Ok(LlamaConfiguration {
+                            models: __field0,
+                        })
+                    }
+                    #[inline]
+                    fn visit_map<__A>(
+                        self,
+                        mut __map: __A,
+                    ) -> _serde::__private228::Result<Self::Value, __A::Error>
+                    where
+                        __A: _serde::de::MapAccess<'de>,
+                    {
+                        let mut __field0: _serde::__private228::Option<
+                            HashMap<Box<str>, LlamaServer>,
+                        > = _serde::__private228::None;
+                        while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
+                            __Field,
+                        >(&mut __map)? {
+                            match __key {
+                                __Field::__field0 => {
+                                    if _serde::__private228::Option::is_some(&__field0) {
+                                        return _serde::__private228::Err(
+                                            <__A::Error as _serde::de::Error>::duplicate_field("models"),
+                                        );
+                                    }
+                                    __field0 = _serde::__private228::Some(
+                                        _serde::de::MapAccess::next_value::<
+                                            HashMap<Box<str>, LlamaServer>,
+                                        >(&mut __map)?,
+                                    );
+                                }
+                                _ => {
+                                    let _ = _serde::de::MapAccess::next_value::<
+                                        _serde::de::IgnoredAny,
+                                    >(&mut __map)?;
+                                }
+                            }
+                        }
+                        let __field0 = match __field0 {
+                            _serde::__private228::Some(__field0) => __field0,
+                            _serde::__private228::None => {
+                                _serde::__private228::de::missing_field("models")?
+                            }
+                        };
+                        _serde::__private228::Ok(LlamaConfiguration {
+                            models: __field0,
+                        })
+                    }
+                }
+                #[doc(hidden)]
+                const FIELDS: &'static [&'static str] = &["models"];
+                _serde::Deserializer::deserialize_struct(
+                    __deserializer,
+                    "LlamaConfiguration",
+                    FIELDS,
+                    __Visitor {
+                        marker: _serde::__private228::PhantomData::<LlamaConfiguration>,
+                        lifetime: _serde::__private228::PhantomData,
+                    },
+                )
+            }
+        }
+    };
+    impl Zeroize for LlamaConfiguration {
+        fn zeroize(&mut self) {
+            self.models
+                .iter_mut()
+                .for_each(|(_, v)| {
+                    v.zeroize();
+                });
+            self.models.clear();
+        }
+    }
+    impl ZeroizeOnDrop for LlamaConfiguration {}
+    pub struct LlamaServer {
+        pub name: Box<str>,
+        pub url: Box<str>,
+        pub capabilities: Capabilities,
+        pub apikey: Option<Box<str>>,
+    }
+    #[automatically_derived]
+    impl ::core::fmt::Debug for LlamaServer {
+        #[inline]
+        fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+            ::core::fmt::Formatter::debug_struct_field4_finish(
+                f,
+                "LlamaServer",
+                "name",
+                &self.name,
+                "url",
+                &self.url,
+                "capabilities",
+                &self.capabilities,
+                "apikey",
+                &&self.apikey,
+            )
+        }
+    }
+    #[automatically_derived]
+    impl ::core::clone::Clone for LlamaServer {
+        #[inline]
+        fn clone(&self) -> LlamaServer {
+            LlamaServer {
+                name: ::core::clone::Clone::clone(&self.name),
+                url: ::core::clone::Clone::clone(&self.url),
+                capabilities: ::core::clone::Clone::clone(&self.capabilities),
+                apikey: ::core::clone::Clone::clone(&self.apikey),
+            }
+        }
+    }
+    #[doc(hidden)]
+    #[allow(
+        non_upper_case_globals,
+        unused_attributes,
+        unused_qualifications,
+        clippy::absolute_paths,
+    )]
+    const _: () = {
+        #[allow(unused_extern_crates, clippy::useless_attribute)]
+        extern crate serde as _serde;
+        #[automatically_derived]
+        impl _serde::Serialize for LlamaServer {
+            fn serialize<__S>(
+                &self,
+                __serializer: __S,
+            ) -> _serde::__private228::Result<__S::Ok, __S::Error>
+            where
+                __S: _serde::Serializer,
+            {
+                let mut __serde_state = _serde::Serializer::serialize_struct(
+                    __serializer,
+                    "LlamaServer",
+                    false as usize + 1 + 1 + 1 + 1,
                 )?;
                 _serde::ser::SerializeStruct::serialize_field(
                     &mut __serde_state,
-                    "port",
-                    &self.port,
+                    "name",
+                    &self.name,
                 )?;
                 _serde::ser::SerializeStruct::serialize_field(
                     &mut __serde_state,
-                    "msgs",
-                    &self.msgs,
+                    "url",
+                    &self.url,
                 )?;
                 _serde::ser::SerializeStruct::serialize_field(
                     &mut __serde_state,
-                    "cvmodels",
-                    &self.cvmodels,
+                    "capabilities",
+                    &self.capabilities,
                 )?;
                 _serde::ser::SerializeStruct::serialize_field(
                     &mut __serde_state,
-                    "txtmodels",
-                    &self.txtmodels,
+                    "apikey",
+                    &self.apikey,
                 )?;
                 _serde::ser::SerializeStruct::end(__serde_state)
             }
@@ -9851,7 +10297,7 @@ pub(crate) mod structs {
         #[allow(unused_extern_crates, clippy::useless_attribute)]
         extern crate serde as _serde;
         #[automatically_derived]
-        impl<'de> _serde::Deserialize<'de> for OllamaConfiguration {
+        impl<'de> _serde::Deserialize<'de> for LlamaServer {
             fn deserialize<__D>(
                 __deserializer: __D,
             ) -> _serde::__private228::Result<Self, __D::Error>
@@ -9865,7 +10311,6 @@ pub(crate) mod structs {
                     __field1,
                     __field2,
                     __field3,
-                    __field4,
                     __ignore,
                 }
                 #[doc(hidden)]
@@ -9894,7 +10339,6 @@ pub(crate) mod structs {
                             1u64 => _serde::__private228::Ok(__Field::__field1),
                             2u64 => _serde::__private228::Ok(__Field::__field2),
                             3u64 => _serde::__private228::Ok(__Field::__field3),
-                            4u64 => _serde::__private228::Ok(__Field::__field4),
                             _ => _serde::__private228::Ok(__Field::__ignore),
                         }
                     }
@@ -9906,11 +10350,10 @@ pub(crate) mod structs {
                         __E: _serde::de::Error,
                     {
                         match __value {
-                            "host" => _serde::__private228::Ok(__Field::__field0),
-                            "port" => _serde::__private228::Ok(__Field::__field1),
-                            "msgs" => _serde::__private228::Ok(__Field::__field2),
-                            "cvmodels" => _serde::__private228::Ok(__Field::__field3),
-                            "txtmodels" => _serde::__private228::Ok(__Field::__field4),
+                            "name" => _serde::__private228::Ok(__Field::__field0),
+                            "url" => _serde::__private228::Ok(__Field::__field1),
+                            "capabilities" => _serde::__private228::Ok(__Field::__field2),
+                            "apikey" => _serde::__private228::Ok(__Field::__field3),
                             _ => _serde::__private228::Ok(__Field::__ignore),
                         }
                     }
@@ -9922,11 +10365,12 @@ pub(crate) mod structs {
                         __E: _serde::de::Error,
                     {
                         match __value {
-                            b"host" => _serde::__private228::Ok(__Field::__field0),
-                            b"port" => _serde::__private228::Ok(__Field::__field1),
-                            b"msgs" => _serde::__private228::Ok(__Field::__field2),
-                            b"cvmodels" => _serde::__private228::Ok(__Field::__field3),
-                            b"txtmodels" => _serde::__private228::Ok(__Field::__field4),
+                            b"name" => _serde::__private228::Ok(__Field::__field0),
+                            b"url" => _serde::__private228::Ok(__Field::__field1),
+                            b"capabilities" => {
+                                _serde::__private228::Ok(__Field::__field2)
+                            }
+                            b"apikey" => _serde::__private228::Ok(__Field::__field3),
                             _ => _serde::__private228::Ok(__Field::__ignore),
                         }
                     }
@@ -9948,19 +10392,19 @@ pub(crate) mod structs {
                 }
                 #[doc(hidden)]
                 struct __Visitor<'de> {
-                    marker: _serde::__private228::PhantomData<OllamaConfiguration>,
+                    marker: _serde::__private228::PhantomData<LlamaServer>,
                     lifetime: _serde::__private228::PhantomData<&'de ()>,
                 }
                 #[automatically_derived]
                 impl<'de> _serde::de::Visitor<'de> for __Visitor<'de> {
-                    type Value = OllamaConfiguration;
+                    type Value = LlamaServer;
                     fn expecting(
                         &self,
                         __formatter: &mut _serde::__private228::Formatter,
                     ) -> _serde::__private228::fmt::Result {
                         _serde::__private228::Formatter::write_str(
                             __formatter,
-                            "struct OllamaConfiguration",
+                            "struct LlamaServer",
                         )
                     }
                     #[inline]
@@ -9979,69 +10423,55 @@ pub(crate) mod structs {
                                 return _serde::__private228::Err(
                                     _serde::de::Error::invalid_length(
                                         0usize,
-                                        &"struct OllamaConfiguration with 5 elements",
+                                        &"struct LlamaServer with 4 elements",
                                     ),
                                 );
                             }
                         };
                         let __field1 = match _serde::de::SeqAccess::next_element::<
-                            u16,
+                            Box<str>,
                         >(&mut __seq)? {
                             _serde::__private228::Some(__value) => __value,
                             _serde::__private228::None => {
                                 return _serde::__private228::Err(
                                     _serde::de::Error::invalid_length(
                                         1usize,
-                                        &"struct OllamaConfiguration with 5 elements",
+                                        &"struct LlamaServer with 4 elements",
                                     ),
                                 );
                             }
                         };
                         let __field2 = match _serde::de::SeqAccess::next_element::<
-                            usize,
+                            Capabilities,
                         >(&mut __seq)? {
                             _serde::__private228::Some(__value) => __value,
                             _serde::__private228::None => {
                                 return _serde::__private228::Err(
                                     _serde::de::Error::invalid_length(
                                         2usize,
-                                        &"struct OllamaConfiguration with 5 elements",
+                                        &"struct LlamaServer with 4 elements",
                                     ),
                                 );
                             }
                         };
                         let __field3 = match _serde::de::SeqAccess::next_element::<
-                            HashSet<Box<str>>,
+                            Option<Box<str>>,
                         >(&mut __seq)? {
                             _serde::__private228::Some(__value) => __value,
                             _serde::__private228::None => {
                                 return _serde::__private228::Err(
                                     _serde::de::Error::invalid_length(
                                         3usize,
-                                        &"struct OllamaConfiguration with 5 elements",
+                                        &"struct LlamaServer with 4 elements",
                                     ),
                                 );
                             }
                         };
-                        let __field4 = match _serde::de::SeqAccess::next_element::<
-                            HashSet<Box<str>>,
-                        >(&mut __seq)? {
-                            _serde::__private228::Some(__value) => __value,
-                            _serde::__private228::None => {
-                                return _serde::__private228::Err(
-                                    _serde::de::Error::invalid_length(
-                                        4usize,
-                                        &"struct OllamaConfiguration with 5 elements",
-                                    ),
-                                );
-                            }
-                        };
-                        _serde::__private228::Ok(OllamaConfiguration {
-                            host: __field0,
-                            port: __field1,
-                            msgs: __field2,
-                            cvmodels: __field3,
-                            txtmodels: __field4,
+                        _serde::__private228::Ok(LlamaServer {
+                            name: __field0,
+                            url: __field1,
+                            capabilities: __field2,
+                            apikey: __field3,
                         })
                     }
                     #[inline]
@@ -10053,13 +10483,10 @@ pub(crate) mod structs {
                         __A: _serde::de::MapAccess<'de>,
                     {
                         let mut __field0: _serde::__private228::Option<Box<str>> = _serde::__private228::None;
-                        let mut __field1: _serde::__private228::Option<u16> = _serde::__private228::None;
-                        let mut __field2: _serde::__private228::Option<usize> = _serde::__private228::None;
+                        let mut __field1: _serde::__private228::Option<Box<str>> = _serde::__private228::None;
+                        let mut __field2: _serde::__private228::Option<Capabilities> = _serde::__private228::None;
                         let mut __field3: _serde::__private228::Option<
-                            HashSet<Box<str>>,
-                        > = _serde::__private228::None;
-                        let mut __field4: _serde::__private228::Option<
-                            HashSet<Box<str>>,
+                            Option<Box<str>>,
                         > = _serde::__private228::None;
                         while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
                             __Field,
@@ -10068,7 +10495,7 @@ pub(crate) mod structs {
                                 __Field::__field0 => {
                                     if _serde::__private228::Option::is_some(&__field0) {
                                         return _serde::__private228::Err(
-                                            <__A::Error as _serde::de::Error>::duplicate_field("host"),
+                                            <__A::Error as _serde::de::Error>::duplicate_field("name"),
                                         );
                                     }
                                     __field0 = _serde::__private228::Some(
@@ -10078,48 +10505,36 @@ pub(crate) mod structs {
                                 __Field::__field1 => {
                                     if _serde::__private228::Option::is_some(&__field1) {
                                         return _serde::__private228::Err(
-                                            <__A::Error as _serde::de::Error>::duplicate_field("port"),
+                                            <__A::Error as _serde::de::Error>::duplicate_field("url"),
                                         );
                                     }
                                     __field1 = _serde::__private228::Some(
-                                        _serde::de::MapAccess::next_value::<u16>(&mut __map)?,
+                                        _serde::de::MapAccess::next_value::<Box<str>>(&mut __map)?,
                                     );
                                 }
                                 __Field::__field2 => {
                                     if _serde::__private228::Option::is_some(&__field2) {
                                         return _serde::__private228::Err(
-                                            <__A::Error as _serde::de::Error>::duplicate_field("msgs"),
+                                            <__A::Error as _serde::de::Error>::duplicate_field(
+                                                "capabilities",
+                                            ),
                                         );
                                     }
                                     __field2 = _serde::__private228::Some(
-                                        _serde::de::MapAccess::next_value::<usize>(&mut __map)?,
+                                        _serde::de::MapAccess::next_value::<
+                                            Capabilities,
+                                        >(&mut __map)?,
                                     );
                                 }
                                 __Field::__field3 => {
                                     if _serde::__private228::Option::is_some(&__field3) {
                                         return _serde::__private228::Err(
-                                            <__A::Error as _serde::de::Error>::duplicate_field(
-                                                "cvmodels",
-                                            ),
+                                            <__A::Error as _serde::de::Error>::duplicate_field("apikey"),
                                         );
                                     }
                                     __field3 = _serde::__private228::Some(
                                         _serde::de::MapAccess::next_value::<
-                                            HashSet<Box<str>>,
-                                        >(&mut __map)?,
-                                    );
-                                }
-                                __Field::__field4 => {
-                                    if _serde::__private228::Option::is_some(&__field4) {
-                                        return _serde::__private228::Err(
-                                            <__A::Error as _serde::de::Error>::duplicate_field(
-                                                "txtmodels",
-                                            ),
-                                        );
-                                    }
-                                    __field4 = _serde::__private228::Some(
-                                        _serde::de::MapAccess::next_value::<
-                                            HashSet<Box<str>>,
+                                            Option<Box<str>>,
                                         >(&mut __map)?,
                                     );
                                 }
@@ -10133,79 +10548,177 @@ pub(crate) mod structs {
                         let __field0 = match __field0 {
                             _serde::__private228::Some(__field0) => __field0,
                             _serde::__private228::None => {
-                                _serde::__private228::de::missing_field("host")?
+                                _serde::__private228::de::missing_field("name")?
                             }
                         };
                         let __field1 = match __field1 {
                             _serde::__private228::Some(__field1) => __field1,
                             _serde::__private228::None => {
-                                _serde::__private228::de::missing_field("port")?
+                                _serde::__private228::de::missing_field("url")?
                             }
                         };
                         let __field2 = match __field2 {
                             _serde::__private228::Some(__field2) => __field2,
                             _serde::__private228::None => {
-                                _serde::__private228::de::missing_field("msgs")?
+                                _serde::__private228::de::missing_field("capabilities")?
                             }
                         };
                         let __field3 = match __field3 {
                             _serde::__private228::Some(__field3) => __field3,
                             _serde::__private228::None => {
-                                _serde::__private228::de::missing_field("cvmodels")?
+                                _serde::__private228::de::missing_field("apikey")?
                             }
                         };
-                        let __field4 = match __field4 {
-                            _serde::__private228::Some(__field4) => __field4,
-                            _serde::__private228::None => {
-                                _serde::__private228::de::missing_field("txtmodels")?
-                            }
-                        };
-                        _serde::__private228::Ok(OllamaConfiguration {
-                            host: __field0,
-                            port: __field1,
-                            msgs: __field2,
-                            cvmodels: __field3,
-                            txtmodels: __field4,
+                        _serde::__private228::Ok(LlamaServer {
+                            name: __field0,
+                            url: __field1,
+                            capabilities: __field2,
+                            apikey: __field3,
                         })
                     }
                 }
                 #[doc(hidden)]
                 const FIELDS: &'static [&'static str] = &[
-                    "host",
-                    "port",
-                    "msgs",
-                    "cvmodels",
-                    "txtmodels",
+                    "name",
+                    "url",
+                    "capabilities",
+                    "apikey",
                 ];
                 _serde::Deserializer::deserialize_struct(
                     __deserializer,
-                    "OllamaConfiguration",
+                    "LlamaServer",
                     FIELDS,
                     __Visitor {
-                        marker: _serde::__private228::PhantomData::<OllamaConfiguration>,
+                        marker: _serde::__private228::PhantomData::<LlamaServer>,
                         lifetime: _serde::__private228::PhantomData,
                     },
                 )
             }
         }
     };
-    #[automatically_derived]
-    impl ::core::default::Default for OllamaConfiguration {
-        #[inline]
-        fn default() -> OllamaConfiguration {
-            OllamaConfiguration {
-                host: ::core::default::Default::default(),
-                port: ::core::default::Default::default(),
-                msgs: ::core::default::Default::default(),
-                cvmodels: ::core::default::Default::default(),
-                txtmodels: ::core::default::Default::default(),
+    impl ::zeroize::Zeroize for LlamaServer {
+        fn zeroize(&mut self) {
+            match self {
+                #[allow(unused_variables)]
+                LlamaServer { name, url, capabilities, apikey } => {
+                    name.zeroize();
+                    url.zeroize();
+                    capabilities.zeroize();
+                    apikey.zeroize()
+                }
+                _ => {}
             }
+        }
+    }
+    impl Drop for LlamaServer {
+        fn drop(&mut self) {
+            use ::zeroize::__internal::AssertZeroize;
+            use ::zeroize::__internal::AssertZeroizeOnDrop;
+            match self {
+                #[allow(unused_variables)]
+                LlamaServer { name, url, capabilities, apikey } => {
+                    name.zeroize_or_on_drop();
+                    url.zeroize_or_on_drop();
+                    capabilities.zeroize_or_on_drop();
+                    apikey.zeroize_or_on_drop()
+                }
+                _ => {}
+            }
+        }
+    }
+    #[doc(hidden)]
+    impl ::zeroize::ZeroizeOnDrop for LlamaServer {}
+    pub enum ModelFlag {
+        Image,
+        Audio,
+        Files,
+    }
+    impl ModelFlag {
+        pub fn into_int(self) -> u16 {
+            match self {
+                Self::Image => 1,
+                Self::Audio => 2,
+                Self::Files => 4,
+            }
+        }
+    }
+    #[repr(transparent)]
+    pub struct Capabilities(pub u16);
+    #[automatically_derived]
+    impl ::core::fmt::Debug for Capabilities {
+        #[inline]
+        fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+            ::core::fmt::Formatter::debug_tuple_field1_finish(
+                f,
+                "Capabilities",
+                &&self.0,
+            )
+        }
+    }
+    #[automatically_derived]
+    impl ::core::clone::Clone for Capabilities {
+        #[inline]
+        fn clone(&self) -> Capabilities {
+            Capabilities(::core::clone::Clone::clone(&self.0))
+        }
+    }
+    #[automatically_derived]
+    impl ::core::default::Default for Capabilities {
+        #[inline]
+        fn default() -> Capabilities {
+            Capabilities(::core::default::Default::default())
+        }
+    }
+    impl ::zeroize::Zeroize for Capabilities {
+        fn zeroize(&mut self) {
+            match self {
+                #[allow(unused_variables)]
+                Capabilities(__zeroize_field_0) => __zeroize_field_0.zeroize(),
+                _ => {}
+            }
+        }
+    }
+    impl Drop for Capabilities {
+        fn drop(&mut self) {
+            use ::zeroize::__internal::AssertZeroize;
+            use ::zeroize::__internal::AssertZeroizeOnDrop;
+            match self {
+                #[allow(unused_variables)]
+                Capabilities(__zeroize_field_0) => __zeroize_field_0.zeroize_or_on_drop(),
+                _ => {}
+            }
+        }
+    }
+    #[doc(hidden)]
+    impl ::zeroize::ZeroizeOnDrop for Capabilities {}
+    impl Serialize for Capabilities {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            self.0.serialize(serializer)
+        }
+    }
+    impl<'de> Deserialize<'de> for Capabilities {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            Ok(Self(u16::deserialize(deserializer)?))
+        }
+    }
+    impl Capabilities {
+        pub fn add(&mut self, flag: ModelFlag) {
+            self.0 |= flag.into_int();
+        }
+        pub fn has(&self, flag: ModelFlag) -> bool {
+            (self.0 & flag.into_int()) > 0
         }
     }
     #[serde(tag = "kind")]
     pub enum Authentication {
         OpenToAll,
-        Account { registration_allowed: bool },
+        Account { registration_allowed: bool, max_memory: u32, time_cost: u32 },
     }
     #[automatically_derived]
     impl ::core::fmt::Debug for Authentication {
@@ -10215,12 +10728,20 @@ pub(crate) mod structs {
                 Authentication::OpenToAll => {
                     ::core::fmt::Formatter::write_str(f, "OpenToAll")
                 }
-                Authentication::Account { registration_allowed: __self_0 } => {
-                    ::core::fmt::Formatter::debug_struct_field1_finish(
+                Authentication::Account {
+                    registration_allowed: __self_0,
+                    max_memory: __self_1,
+                    time_cost: __self_2,
+                } => {
+                    ::core::fmt::Formatter::debug_struct_field3_finish(
                         f,
                         "Account",
                         "registration_allowed",
-                        &__self_0,
+                        __self_0,
+                        "max_memory",
+                        __self_1,
+                        "time_cost",
+                        &__self_2,
                     )
                 }
             }
@@ -10232,9 +10753,15 @@ pub(crate) mod structs {
         fn clone(&self) -> Authentication {
             match self {
                 Authentication::OpenToAll => Authentication::OpenToAll,
-                Authentication::Account { registration_allowed: __self_0 } => {
+                Authentication::Account {
+                    registration_allowed: __self_0,
+                    max_memory: __self_1,
+                    time_cost: __self_2,
+                } => {
                     Authentication::Account {
                         registration_allowed: ::core::clone::Clone::clone(__self_0),
+                        max_memory: ::core::clone::Clone::clone(__self_1),
+                        time_cost: ::core::clone::Clone::clone(__self_2),
                     }
                 }
             }
@@ -10273,11 +10800,15 @@ pub(crate) mod structs {
                         )?;
                         _serde::ser::SerializeStruct::end(__struct)
                     }
-                    Authentication::Account { ref registration_allowed } => {
+                    Authentication::Account {
+                        ref registration_allowed,
+                        ref max_memory,
+                        ref time_cost,
+                    } => {
                         let mut __serde_state = _serde::Serializer::serialize_struct(
                             __serializer,
                             "Authentication",
-                            0 + 1 + 1,
+                            0 + 1 + 1 + 1 + 1,
                         )?;
                         _serde::ser::SerializeStruct::serialize_field(
                             &mut __serde_state,
@@ -10288,6 +10819,16 @@ pub(crate) mod structs {
                             &mut __serde_state,
                             "registration_allowed",
                             registration_allowed,
+                        )?;
+                        _serde::ser::SerializeStruct::serialize_field(
+                            &mut __serde_state,
+                            "max_memory",
+                            max_memory,
+                        )?;
+                        _serde::ser::SerializeStruct::serialize_field(
+                            &mut __serde_state,
+                            "time_cost",
+                            time_cost,
                         )?;
                         _serde::ser::SerializeStruct::end(__serde_state)
                     }
@@ -10433,6 +10974,8 @@ pub(crate) mod structs {
                         #[doc(hidden)]
                         enum __Field {
                             __field0,
+                            __field1,
+                            __field2,
                             __ignore,
                         }
                         #[doc(hidden)]
@@ -10458,6 +11001,8 @@ pub(crate) mod structs {
                             {
                                 match __value {
                                     0u64 => _serde::__private228::Ok(__Field::__field0),
+                                    1u64 => _serde::__private228::Ok(__Field::__field1),
+                                    2u64 => _serde::__private228::Ok(__Field::__field2),
                                     _ => _serde::__private228::Ok(__Field::__ignore),
                                 }
                             }
@@ -10472,6 +11017,8 @@ pub(crate) mod structs {
                                     "registration_allowed" => {
                                         _serde::__private228::Ok(__Field::__field0)
                                     }
+                                    "max_memory" => _serde::__private228::Ok(__Field::__field1),
+                                    "time_cost" => _serde::__private228::Ok(__Field::__field2),
                                     _ => _serde::__private228::Ok(__Field::__ignore),
                                 }
                             }
@@ -10486,6 +11033,8 @@ pub(crate) mod structs {
                                     b"registration_allowed" => {
                                         _serde::__private228::Ok(__Field::__field0)
                                     }
+                                    b"max_memory" => _serde::__private228::Ok(__Field::__field1),
+                                    b"time_cost" => _serde::__private228::Ok(__Field::__field2),
                                     _ => _serde::__private228::Ok(__Field::__ignore),
                                 }
                             }
@@ -10538,13 +11087,41 @@ pub(crate) mod structs {
                                         return _serde::__private228::Err(
                                             _serde::de::Error::invalid_length(
                                                 0usize,
-                                                &"struct variant Authentication::Account with 1 element",
+                                                &"struct variant Authentication::Account with 3 elements",
+                                            ),
+                                        );
+                                    }
+                                };
+                                let __field1 = match _serde::de::SeqAccess::next_element::<
+                                    u32,
+                                >(&mut __seq)? {
+                                    _serde::__private228::Some(__value) => __value,
+                                    _serde::__private228::None => {
+                                        return _serde::__private228::Err(
+                                            _serde::de::Error::invalid_length(
+                                                1usize,
+                                                &"struct variant Authentication::Account with 3 elements",
+                                            ),
+                                        );
+                                    }
+                                };
+                                let __field2 = match _serde::de::SeqAccess::next_element::<
+                                    u32,
+                                >(&mut __seq)? {
+                                    _serde::__private228::Some(__value) => __value,
+                                    _serde::__private228::None => {
+                                        return _serde::__private228::Err(
+                                            _serde::de::Error::invalid_length(
+                                                2usize,
+                                                &"struct variant Authentication::Account with 3 elements",
                                             ),
                                         );
                                     }
                                 };
                                 _serde::__private228::Ok(Authentication::Account {
                                     registration_allowed: __field0,
+                                    max_memory: __field1,
+                                    time_cost: __field2,
                                 })
                             }
                             #[inline]
@@ -10556,6 +11133,8 @@ pub(crate) mod structs {
                                 __A: _serde::de::MapAccess<'de>,
                             {
                                 let mut __field0: _serde::__private228::Option<bool> = _serde::__private228::None;
+                                let mut __field1: _serde::__private228::Option<u32> = _serde::__private228::None;
+                                let mut __field2: _serde::__private228::Option<u32> = _serde::__private228::None;
                                 while let _serde::__private228::Some(__key) = _serde::de::MapAccess::next_key::<
                                     __Field,
                                 >(&mut __map)? {
@@ -10570,6 +11149,30 @@ pub(crate) mod structs {
                                             }
                                             __field0 = _serde::__private228::Some(
                                                 _serde::de::MapAccess::next_value::<bool>(&mut __map)?,
+                                            );
+                                        }
+                                        __Field::__field1 => {
+                                            if _serde::__private228::Option::is_some(&__field1) {
+                                                return _serde::__private228::Err(
+                                                    <__A::Error as _serde::de::Error>::duplicate_field(
+                                                        "max_memory",
+                                                    ),
+                                                );
+                                            }
+                                            __field1 = _serde::__private228::Some(
+                                                _serde::de::MapAccess::next_value::<u32>(&mut __map)?,
+                                            );
+                                        }
+                                        __Field::__field2 => {
+                                            if _serde::__private228::Option::is_some(&__field2) {
+                                                return _serde::__private228::Err(
+                                                    <__A::Error as _serde::de::Error>::duplicate_field(
+                                                        "time_cost",
+                                                    ),
+                                                );
+                                            }
+                                            __field2 = _serde::__private228::Some(
+                                                _serde::de::MapAccess::next_value::<u32>(&mut __map)?,
                                             );
                                         }
                                         _ => {
@@ -10587,14 +11190,30 @@ pub(crate) mod structs {
                                         )?
                                     }
                                 };
+                                let __field1 = match __field1 {
+                                    _serde::__private228::Some(__field1) => __field1,
+                                    _serde::__private228::None => {
+                                        _serde::__private228::de::missing_field("max_memory")?
+                                    }
+                                };
+                                let __field2 = match __field2 {
+                                    _serde::__private228::Some(__field2) => __field2,
+                                    _serde::__private228::None => {
+                                        _serde::__private228::de::missing_field("time_cost")?
+                                    }
+                                };
                                 _serde::__private228::Ok(Authentication::Account {
                                     registration_allowed: __field0,
+                                    max_memory: __field1,
+                                    time_cost: __field2,
                                 })
                             }
                         }
                         #[doc(hidden)]
                         const FIELDS: &'static [&'static str] = &[
                             "registration_allowed",
+                            "max_memory",
+                            "time_cost",
                         ];
                         _serde::Deserializer::deserialize_any(
                             __deserializer,
@@ -10619,17 +11238,82 @@ pub(crate) mod structs {
             __self_discr == __arg1_discr
                 && match (self, other) {
                     (
-                        Authentication::Account { registration_allowed: __self_0 },
-                        Authentication::Account { registration_allowed: __arg1_0 },
-                    ) => __self_0 == __arg1_0,
+                        Authentication::Account {
+                            registration_allowed: __self_0,
+                            max_memory: __self_1,
+                            time_cost: __self_2,
+                        },
+                        Authentication::Account {
+                            registration_allowed: __arg1_0,
+                            max_memory: __arg1_1,
+                            time_cost: __arg1_2,
+                        },
+                    ) => {
+                        __self_0 == __arg1_0 && __self_1 == __arg1_1
+                            && __self_2 == __arg1_2
+                    }
                     _ => true,
                 }
         }
     }
+    impl ::zeroize::Zeroize for Authentication {
+        fn zeroize(&mut self) {
+            match self {
+                #[allow(unused_variables)]
+                Authentication::OpenToAll => {}
+                #[allow(unused_variables)]
+                Authentication::Account {
+                    registration_allowed,
+                    max_memory,
+                    time_cost,
+                } => {
+                    registration_allowed.zeroize();
+                    max_memory.zeroize();
+                    time_cost.zeroize()
+                }
+                _ => {}
+            }
+        }
+    }
+    impl Drop for Authentication {
+        fn drop(&mut self) {
+            use ::zeroize::__internal::AssertZeroize;
+            use ::zeroize::__internal::AssertZeroizeOnDrop;
+            match self {
+                #[allow(unused_variables)]
+                Authentication::OpenToAll => {}
+                #[allow(unused_variables)]
+                Authentication::Account {
+                    registration_allowed,
+                    max_memory,
+                    time_cost,
+                } => {
+                    registration_allowed.zeroize_or_on_drop();
+                    max_memory.zeroize_or_on_drop();
+                    time_cost.zeroize_or_on_drop()
+                }
+                _ => {}
+            }
+        }
+    }
+    #[doc(hidden)]
+    impl ::zeroize::ZeroizeOnDrop for Authentication {}
     impl Config {
         pub async fn new() -> Returns<Self> {
             let val = fs::read_to_string("./config.json").await?;
-            Ok(from_str::<Self>(&val)?)
+            let out = from_str::<Self>(&val)?;
+            if out.version != VERSION {
+                {
+                    ::core::panicking::panic_fmt(
+                        format_args!(
+                            "❌ Database Config version mismatch:\n         Expected version {1}, found {0}.\n         Please migrate your configuration file to match the current schema.",
+                            out.version,
+                            VERSION,
+                        ),
+                    );
+                };
+            }
+            Ok(out)
         }
         pub async fn new_or_default() -> Self {
             Self::new().await.unwrap_or_default()
@@ -10642,15 +11326,60 @@ pub(crate) mod structs {
     impl Default for Config {
         fn default() -> Self {
             Self {
+                version: VERSION,
+                database: DatabaseConfig::default(),
                 binds: def_bind(),
                 admin_pass_hash: None,
-                ollama: OllamaConfiguration::default(),
-                authentication: Authentication::OpenToAll,
+                llama: LlamaConfiguration::default(),
+                authentication: Authentication::Account {
+                    registration_allowed: true,
+                    max_memory: 64,
+                    time_cost: 5,
+                },
             }
         }
     }
 }
 use chalk_rs::Chalk;
+static GLOBAL: std::alloc::System = std::alloc::System;
+const _: () = {
+    #[rustc_std_internal_symbol]
+    unsafe fn __rust_alloc(size: usize, align: usize) -> *mut u8 {
+        ::core::alloc::GlobalAlloc::alloc(
+            &GLOBAL,
+            ::core::alloc::Layout::from_size_align_unchecked(size, align),
+        )
+    }
+    #[rustc_std_internal_symbol]
+    unsafe fn __rust_dealloc(ptr: *mut u8, size: usize, align: usize) -> () {
+        ::core::alloc::GlobalAlloc::dealloc(
+            &GLOBAL,
+            ptr,
+            ::core::alloc::Layout::from_size_align_unchecked(size, align),
+        )
+    }
+    #[rustc_std_internal_symbol]
+    unsafe fn __rust_realloc(
+        ptr: *mut u8,
+        size: usize,
+        align: usize,
+        new_size: usize,
+    ) -> *mut u8 {
+        ::core::alloc::GlobalAlloc::realloc(
+            &GLOBAL,
+            ptr,
+            ::core::alloc::Layout::from_size_align_unchecked(size, align),
+            new_size,
+        )
+    }
+    #[rustc_std_internal_symbol]
+    unsafe fn __rust_alloc_zeroed(size: usize, align: usize) -> *mut u8 {
+        ::core::alloc::GlobalAlloc::alloc_zeroed(
+            &GLOBAL,
+            ::core::alloc::Layout::from_size_align_unchecked(size, align),
+        )
+    }
+};
 fn main() {
     panic::set_hook(
         Box::new(|x| {
@@ -10680,6 +11409,7 @@ fn main() {
                     ::std::io::_print(format_args!("ERR: Unknown\n"));
                 };
             }
+            process::exit(1);
         }),
     );
     let mut args = args();
@@ -10697,6 +11427,7 @@ fn main() {
     if config_ui {
         ui::ui();
     } else {
+        log::setup();
         server::main().unwrap();
     }
 }
