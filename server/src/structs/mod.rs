@@ -19,7 +19,7 @@ pub struct Config {
   pub admin_pass_hash: Option<String>,
   pub llama: LlamaConfiguration,
   pub authentication: Authentication,
-  pub database: DatabaseConfig
+  pub database: DatabaseConfig,
 }
 
 fn def_bind() -> Vec<(String, u16)> {
@@ -89,7 +89,7 @@ impl Capabilities {
   //   self.0 &= !flag.into_int();
   // }
 
-  pub fn has(&mut self, flag: ModelFlag) -> bool {
+  pub fn has(&self, flag: ModelFlag) -> bool {
     (self.0 & flag.into_int()) > 0
   }
 }
@@ -110,7 +110,7 @@ impl Config {
     let val = fs::read_to_string("./config.json").await?;
 
     let out = from_str::<Self>(&val)?;
-    
+
     if out.version != VERSION {
       panic!(
         "❌ Database Config version mismatch:

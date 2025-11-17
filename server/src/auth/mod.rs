@@ -63,7 +63,7 @@ impl AuthSessionManager {
     let sessions: Box<dyn AsyncCaching + Send + Sync>;
 
     match &DBCONF.authdb {
-      AuthDbConfig::Moka {  } => {
+      AuthDbConfig::Moka {} => {
         warn!(
           "CRITICAL WARNING! YOU ARE USING MOKA DB WHICH NEITHER HAS PERSISTENCE NOR IS RECOMMENDED FOR PRODUCTION IN ANY MEANS. PLEASE SHIFT TO A MORE ROBUST DB IMPLEMENTATION LIKE MONGODB OR TIKV FOR EVEN A HOBBY SERVER."
         );

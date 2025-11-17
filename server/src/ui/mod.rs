@@ -18,14 +18,17 @@ use serde_json::to_string_pretty;
 use tokio::runtime::{Builder, Runtime};
 
 use crate::{
-  auth::argon::{migrate_config, server::{hash_server_pass, verify_server_pass}},
+  auth::argon::{
+    migrate_config,
+    server::{hash_server_pass, verify_server_pass},
+  },
   structs::{Authentication, Config},
 };
 
 mod auth;
 mod bind;
-mod llama;
 mod dbconf;
+mod llama;
 
 pub(crate) mod lazy;
 
@@ -119,6 +122,12 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
             conf.admin_pass_hash = Some(hash_server_pass(&new_pass).unwrap());
 
             migrate_config(&old_pass, &new_pass, conf.deref_mut());
+
+            x.pop_layer();
+            x.add_layer(
+              Dialog::around(TextView::new("Password change was successful, all your encrypted keys were updated."))
+                .dismiss_button("Ok")
+            );
           })
           .dismiss_button("Cancel"),
         );

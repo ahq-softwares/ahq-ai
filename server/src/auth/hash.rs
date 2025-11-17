@@ -30,7 +30,8 @@ impl HashingAgent {
     // `Total threads - 1` so that at least 1 thread is kept idle
     let threads = available_parallelism()
       .expect("Unable to get parallelism")
-      .get() - 1;
+      .get()
+      - 1;
 
     let (tx, rx) = bounded::<HashResp>(2 * threads);
 

@@ -143,8 +143,26 @@ fn render(siv: &mut Cursive) {
 
       thread::spawn(move || {
         let state1 = state1;
+
+        match api::root(&state1.url) {
+          Ok(()) => {},
+          Err(txt) => {
+            _ = tx.send(());
+            _ = sink.send(Box::new(move |x| {
+              x.pop_layer();
+              x.add_layer(
+                Dialog::around(
+                  TextView::new(txt)
+                ).title("Something went wrong").dismiss_button("Ok")
+              );
+            }));
+
+            return;
+          }
+        }
+
         match api::verify(&state1.url, &state1.pwd) {
-          Some(()) => {
+          Ok(()) => {
             _ = tx.send(());
             _ = sink.send(Box::new(|x| {
               x.pop_layer();
@@ -153,14 +171,14 @@ fn render(siv: &mut Cursive) {
               management::run_manager(x);
             }));
           },
-          None => {
+          Err(txt) => {
             _ = tx.send(());
-            _ = sink.send(Box::new(|x| {
+            _ = sink.send(Box::new(move |x| {
               x.pop_layer();
               x.add_layer(
                 Dialog::around(
-                  TextView::new("Invalid server url or password")
-                ).dismiss_button("Ok")
+                  TextView::new(txt)
+                ).title("Something went wrong").dismiss_button("Ok")
               );
             }));
           }

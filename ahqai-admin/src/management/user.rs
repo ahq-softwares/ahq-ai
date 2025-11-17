@@ -10,7 +10,6 @@ use std::{
 use cursive::{
   Cursive, View,
   align::HAlign,
-  style::Color,
   theme::{Effect, Style},
   view::{Nameable, Resizable},
   views::{
@@ -19,7 +18,10 @@ use cursive::{
   },
 };
 
-use crate::{ServerData, api};
+use crate::{
+  ServerData,
+  api::{self, copy},
+};
 
 pub fn tab() -> NamedView<impl View> {
   ScrollView::new(PaddedView::lrtb(
@@ -46,7 +48,12 @@ pub fn tab() -> NamedView<impl View> {
       .child(
         LinearLayout::horizontal()
           .child(TextView::new("- Remove user").full_width())
-          .child(Button::new_raw("[ Remove ]", |s| {}).min_width(10)),
+          .child(
+            Button::new_raw("[ Remove ]", |s| {
+              delete_user_or_tokens(s, false);
+            })
+            .min_width(10),
+          ),
       )
       .child(DummyView::new().fixed_height(2))
       .child(
@@ -57,15 +64,137 @@ pub fn tab() -> NamedView<impl View> {
       .child(
         LinearLayout::horizontal()
           .child(TextView::new("+ Generate new token").full_width())
-          .child(Button::new_raw("[ Generate ]", |s| {}).min_width(12)),
+          .child(
+            Button::new_raw("[ Generate ]", |s| {
+              gen_token(s);
+            })
+            .min_width(12),
+          ),
       )
       .child(
         LinearLayout::horizontal()
           .child(TextView::new("- Remove a token").full_width())
-          .child(Button::new_raw("[ Revoke ]", |s| {}).min_width(10)),
+          .child(
+            Button::new_raw("[ Revoke ]", |s| {
+              delete_user_or_tokens(s, true);
+            })
+            .min_width(10),
+          ),
       ),
   ))
   .with_name("☊ Users, Tokens")
+}
+
+fn gen_token(x: &mut Cursive) {
+  let tx: Sender<()> = loading(x);
+  let sink = x.cb_sink().clone();
+
+  let state: Arc<ServerData> = x.user_data::<Arc<ServerData>>().unwrap().clone();
+  thread::spawn(move || {
+    let out = api::create_token(&state.url, &state.pwd);
+
+    _ = tx.send(());
+
+    _ = sink.send(Box::new(move |x| {
+      // Remove loading bar
+      x.pop_layer();
+
+      match out {
+        Ok(token) => {
+          x.add_layer(
+            Dialog::around(
+              LinearLayout::vertical()
+                .child(TextView::new(
+                  "A new token has been generated! Copy the token as shown",
+                ))
+                .child(TextView::new(token.clone())),
+            )
+            .button("Copy to clipboard", move |_x| {
+              #[cfg(target_os = "macos")]
+              _x.add_layer(
+                Dialog::around(
+                  TextView::new("Please note that this is not supported in macOS environments and we do not fall back to any other methods on this os")
+                ).dismiss_button("Ok")
+              );
+
+              copy::copy(&token);
+
+              _x.add_layer(
+                Dialog::around(
+                  TextView::new("Successfully copied to clipboard")
+                ).dismiss_button("Ok")
+              );
+            })
+            .dismiss_button("Close"),
+          );
+        }
+        Err(e) => {
+          err(x, &e);
+        }
+      }
+    }));
+  });
+}
+
+fn delete_user_or_tokens(x: &mut Cursive, token: bool) {
+  x.add_layer(
+    Dialog::around(
+      LinearLayout::vertical()
+        .child(if token {
+          TextView::new("Unique ID")
+        } else {
+          TextView::new("Enter the characters of the token upto the first `.`")
+        })
+        .child(EditView::new().with_name("uid").min_width(32)),
+    )
+    .title(if token {
+      "Revoke a token"
+    } else {
+      "Remove an account"
+    })
+    .button("Proceed", move |x| {
+      let tx = loading(x);
+
+      let user: &mut Arc<ServerData> = x.user_data().unwrap();
+      let user = user.clone();
+
+      let unique_id = x
+        .call_on_name("uid", |x: &mut EditView| x.get_content())
+        .unwrap();
+
+      let sink = x.cb_sink().clone();
+
+      thread::spawn(move || {
+        let mut uid = unique_id.as_str();
+
+        if token {
+          if let Some((uid_, _)) = unique_id.split_once(".") {
+            uid = uid_;
+          }
+        }
+
+        let out = api::remove_client(&user.url, &user.pwd, &uid);
+
+        _ = tx.send(());
+
+        _ = sink.send(Box::new(move |x| {
+          // Remove loading bar
+          x.pop_layer();
+
+          match out {
+            Ok(()) => {
+              x.pop_layer();
+              success(x);
+            }
+            Err(e) => {
+              err(x, &e);
+            }
+          }
+        }));
+      });
+    })
+    .dismiss_button("Cancel"),
+  );
 }
 
 fn create_user(x: &mut Cursive) {
@@ -108,7 +237,7 @@ fn create_user(x: &mut Cursive) {
               success(x);
             }
             Err(e) => {
-              err(x, e);
+              err(x, &e);
             }
           }
         }));
@@ -126,7 +255,7 @@ fn success(x: &mut Cursive) {
   );
 }
 
-fn err(x: &mut Cursive, e: String) {
+fn err(x: &mut Cursive, e: &str) {
   x.add_layer(
     Dialog::around(TextView::new(e))
       .title("Something went wrong")

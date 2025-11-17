@@ -2,7 +2,8 @@ use std::sync::LazyLock;
 
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
 use argon2::{
-  Algorithm, Argon2, Params, PasswordHash, PasswordHasher, RECOMMENDED_SALT_LEN, Version, password_hash::SaltString
+  Algorithm, Argon2, Params, PasswordHash, PasswordHasher, RECOMMENDED_SALT_LEN, Version,
+  password_hash::SaltString,
 };
 use base64::{Engine, prelude::BASE64_STANDARD};
 use rand::{TryRngCore, rngs::OsRng};
@@ -10,7 +11,8 @@ use rand::{TryRngCore, rngs::OsRng};
 use crate::{
   server::CONFIG,
   structs::{
-    Authentication, Config, error::{Returns, ServerError}
+    Authentication, Config,
+    error::{Returns, ServerError},
   },
 };
 
@@ -122,9 +124,7 @@ pub fn encrypt_with_key(pwd: &str, data: &str) -> String {
     key_bytes
   };
 
-  let aes = {
-    Aes256Gcm::new_from_slice(&key).unwrap()
-  };
+  let aes = { Aes256Gcm::new_from_slice(&key).unwrap() };
 
   let nonce_slice = {
     let mut nonce_slice = [0u8; NONCE_LEN];
@@ -149,11 +149,11 @@ pub fn decrypt_with_key(pwd: &str, data: &str) -> String {
   let raw = BASE64_STANDARD.decode(data).unwrap();
 
   let salt_slice = &raw[0..SALT_LEN];
-  
-  let nonce_slice = &raw[SALT_LEN..(SALT_LEN+NONCE_LEN)];
+
+  let nonce_slice = &raw[SALT_LEN..(SALT_LEN + NONCE_LEN)];
   let nonce = Nonce::from_slice(nonce_slice);
 
-  let cipher = &raw[(SALT_LEN+NONCE_LEN)..];
+  let cipher = &raw[(SALT_LEN + NONCE_LEN)..];
 
   let key = {
     let mut key_bytes = [0u8; KEY_LEN];
@@ -165,9 +165,7 @@ pub fn decrypt_with_key(pwd: &str, data: &str) -> String {
     key_bytes
   };
 
-  let aes = {
-    Aes256Gcm::new_from_slice(&key).unwrap()
-  };
+  let aes = { Aes256Gcm::new_from_slice(&key).unwrap() };
 
   let ciphertext_with_tag = aes.decrypt(nonce, cipher).unwrap();
 

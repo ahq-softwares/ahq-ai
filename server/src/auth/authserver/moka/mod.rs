@@ -1,7 +1,10 @@
 use async_trait::async_trait;
 use moka::future::Cache;
 
-use crate::{auth::authserver::AuthServer, structs::error::{Returns, ServerError}};
+use crate::{
+  auth::authserver::AuthServer,
+  structs::error::{Returns, ServerError},
+};
 
 pub struct MokaTestingDB {
   cache: Cache<String, String>,
@@ -10,8 +13,7 @@ pub struct MokaTestingDB {
 impl MokaTestingDB {
   pub fn new() -> Self {
     Self {
-      cache: Cache::builder()
-        .build(),
+      cache: Cache::builder().build(),
     }
   }
 }

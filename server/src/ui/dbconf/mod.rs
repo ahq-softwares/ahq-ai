@@ -1,4 +1,7 @@
-use cursive::{view::Nameable, views::{LinearLayout, NamedView, ScrollView}};
+use cursive::{
+  view::Nameable,
+  views::{LinearLayout, NamedView, ScrollView},
+};
 
 use crate::{structs::Config, ui::Ptr};
 

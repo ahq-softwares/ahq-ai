@@ -14,7 +14,7 @@ pub fn render(l: &mut LinearLayout, can_register: bool, memory: u32, time: u32) 
   l.add_child(
     LinearLayout::horizontal()
       .child(TextView::new("⚒ Authentication Type").full_width())
-      .child(Button::new_raw("Token (TokenBased)", |_| {})),
+      .child(Button::new_raw("Account Authentication", |_| {})),
   );
 
   l.add_child(

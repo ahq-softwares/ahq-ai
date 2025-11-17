@@ -169,7 +169,7 @@ async fn create_token(body: Bytes) -> Result<impl Responder> {
         Ok(HttpResponse::InternalServerError().body(r#"{ "msg": "Internal Server Error" }"#))
       }
       AccountCreateOutcome::SuccessfulOut(out) => {
-        Ok(HttpResponse::NoContent().body(Bytes::from_owner(out)))
+        Ok(HttpResponse::Ok().body(Bytes::from_owner(out)))
       }
       AccountCreateOutcome::UsernameExists => {
         Ok(HttpResponse::Conflict().body(r#"{ "msg": "User already exists" }"#))
