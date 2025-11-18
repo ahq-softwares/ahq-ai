@@ -3644,6 +3644,466 @@ mod ui {
             Endpoints,
             TLSConf,
         }
+        mod tls {
+            use std::{sync::Arc, thread::spawn};
+            use cursive::{
+                Cursive, align::HAlign, theme::{Effect, Style},
+                view::{Nameable, Resizable},
+                views::{
+                    Button, Dialog, DummyView, EditView, LinearLayout, ScrollView,
+                    TextView,
+                },
+            };
+            use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+            use crate::{
+                auth::argon::{decrypt_with_key, encrypt_with_key},
+                structs::{Config, db::AuthDbConfig},
+                ui::Ptr,
+            };
+            struct Tls {
+                ca_path: String,
+                cert_path: String,
+                key_path: String,
+            }
+            #[automatically_derived]
+            impl ::core::fmt::Debug for Tls {
+                #[inline]
+                fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                    ::core::fmt::Formatter::debug_struct_field3_finish(
+                        f,
+                        "Tls",
+                        "ca_path",
+                        &self.ca_path,
+                        "cert_path",
+                        &self.cert_path,
+                        "key_path",
+                        &&self.key_path,
+                    )
+                }
+            }
+            impl ::zeroize::Zeroize for Tls {
+                fn zeroize(&mut self) {
+                    match self {
+                        #[allow(unused_variables)]
+                        Tls { ca_path, cert_path, key_path } => {
+                            ca_path.zeroize();
+                            cert_path.zeroize();
+                            key_path.zeroize()
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            impl Drop for Tls {
+                fn drop(&mut self) {
+                    use ::zeroize::__internal::AssertZeroize;
+                    use ::zeroize::__internal::AssertZeroizeOnDrop;
+                    match self {
+                        #[allow(unused_variables)]
+                        Tls { ca_path, cert_path, key_path } => {
+                            ca_path.zeroize_or_on_drop();
+                            cert_path.zeroize_or_on_drop();
+                            key_path.zeroize_or_on_drop()
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            #[doc(hidden)]
+            impl ::zeroize::ZeroizeOnDrop for Tls {}
+            pub fn tls(pass: String, x: &mut Cursive) {
+                x.add_layer(Dialog::around(TextView::new("Decrypting...")));
+                let sink = x.cb_sink().clone();
+                let conf = x.user_data::<Ptr<Config>>().unwrap().clone();
+                let pass: Arc<str> = Arc::from(pass);
+                spawn(move || {
+                    let AuthDbConfig::Tikv { tls_config, .. } = &conf.database.authdb
+                    else {
+                        ::core::panicking::panic(
+                            "internal error: entered unreachable code",
+                        );
+                    };
+                    let tls = tls_config.as_ref().unwrap();
+                    let decrypted = Tls {
+                        ca_path: decrypt_with_key(&pass, &tls.ca_path),
+                        cert_path: decrypt_with_key(&pass, &tls.cert_path),
+                        key_path: decrypt_with_key(&pass, &tls.key_path),
+                    };
+                    let decrypted = Zeroizing::new(decrypted);
+                    _ = sink
+                        .send(
+                            Box::new(move |x| {
+                                x.pop_layer();
+                                render(x, pass.clone(), decrypted);
+                            }),
+                        );
+                });
+            }
+            fn render(x: &mut Cursive, pass: Arc<str>, decrypted: Zeroizing<Tls>) {
+                let p1 = pass.clone();
+                let p2 = pass.clone();
+                let p3 = pass.clone();
+                let layout = LinearLayout::vertical()
+                    .child(DummyView::new().fixed_height(1))
+                    .child(
+                        TextView::new(
+                                "Please refer to TiKV official docs at https://tikv.org/docs/4.0/tasks/configure/security/",
+                            )
+                            .h_align(HAlign::Center),
+                    )
+                    .child(DummyView::new().fixed_height(1))
+                    .child(
+                        TextView::new("CA Cert").style(Style::from(Effect::Underline)),
+                    )
+                    .child(
+                        TextView::new(
+                                "The path to the file that contains the PEM encoding of the server’s CA certificates.",
+                            )
+                            .style(Style::from(Effect::Dim)),
+                    )
+                    .child(DummyView::new().fixed_height(1))
+                    .child(
+                        TextView::new(
+                                ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("Currently \"{0}\"", decrypted.ca_path),
+                                    )
+                                }),
+                            )
+                            .with_name("ca_path"),
+                    )
+                    .child(
+                        LinearLayout::horizontal()
+                            .child(DummyView::new().full_width())
+                            .child(
+                                Button::new_raw(
+                                        "Change ↗",
+                                        move |x| {
+                                            set(x, p1.clone(), ToChange::CaPath);
+                                        },
+                                    )
+                                    .fixed_width(6),
+                            ),
+                    )
+                    .child(DummyView::new().fixed_height(1))
+                    .child(
+                        TextView::new("Cert Path").style(Style::from(Effect::Underline)),
+                    )
+                    .child(
+                        TextView::new(
+                                "The path to the file that contains the PEM encoding of the server’s certificate chain.",
+                            )
+                            .style(Style::from(Effect::Dim)),
+                    )
+                    .child(DummyView::new().fixed_height(1))
+                    .child(
+                        TextView::new(
+                                ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("Currently \"{0}\"", decrypted.cert_path),
+                                    )
+                                }),
+                            )
+                            .with_name("cert_path"),
+                    )
+                    .child(
+                        LinearLayout::horizontal()
+                            .child(DummyView::new().full_width())
+                            .child(
+                                Button::new_raw(
+                                        "Change ↗",
+                                        move |x| {
+                                            set(x, p2.clone(), ToChange::CertPath);
+                                        },
+                                    )
+                                    .fixed_width(6),
+                            ),
+                    )
+                    .child(DummyView::new().fixed_height(1))
+                    .child(
+                        TextView::new("Key Path").style(Style::from(Effect::Underline)),
+                    )
+                    .child(
+                        TextView::new(
+                                "The path to the file that contains the PEM encoding of the server’s private key.",
+                            )
+                            .style(Style::from(Effect::Dim)),
+                    )
+                    .child(DummyView::new().fixed_height(1))
+                    .child(
+                        TextView::new(
+                                ::alloc::__export::must_use({
+                                    ::alloc::fmt::format(
+                                        format_args!("Currently \"{0}\"", decrypted.key_path),
+                                    )
+                                }),
+                            )
+                            .with_name("key_path"),
+                    )
+                    .child(
+                        LinearLayout::horizontal()
+                            .child(DummyView::new().full_width())
+                            .child(
+                                Button::new_raw(
+                                        "Change ↗",
+                                        move |x| {
+                                            set(x, p3.clone(), ToChange::KeyPath);
+                                        },
+                                    )
+                                    .fixed_width(6),
+                            ),
+                    );
+                x.add_layer(
+                    Dialog::around(ScrollView::new(layout))
+                        .title("Configure TLS")
+                        .dismiss_button("Back")
+                        .full_screen(),
+                )
+            }
+            enum ToChange {
+                CaPath,
+                CertPath,
+                KeyPath,
+            }
+            fn set(x: &mut Cursive, pass: Arc<str>, ty: ToChange) {
+                x.add_layer(
+                    Dialog::around(
+                            LinearLayout::vertical()
+                                .child(TextView::new("Enter new path"))
+                                .child(EditView::new().with_name("path_data")),
+                        )
+                        .title("Set Path")
+                        .button(
+                            "Ok",
+                            move |x| {
+                                let pass = pass.clone();
+                                let path = x
+                                    .call_on_name(
+                                        "path_data",
+                                        |x: &mut EditView| x.get_content(),
+                                    )
+                                    .unwrap();
+                                let mut conf = x
+                                    .user_data::<Ptr<Config>>()
+                                    .unwrap()
+                                    .clone();
+                                let AuthDbConfig::Tikv { tls_config, .. } = &mut conf
+                                    .database
+                                    .authdb else {
+                                    ::core::panicking::panic(
+                                        "internal error: entered unreachable code",
+                                    );
+                                };
+                                let tls = tls_config.as_mut().unwrap();
+                                let name = match ty {
+                                    ToChange::CaPath => {
+                                        tls.ca_path = encrypt_with_key(&pass, &path)
+                                            .into_boxed_str();
+                                        "ca_path"
+                                    }
+                                    ToChange::CertPath => {
+                                        tls.cert_path = encrypt_with_key(&pass, &path)
+                                            .into_boxed_str();
+                                        "cert_path"
+                                    }
+                                    ToChange::KeyPath => {
+                                        tls.key_path = encrypt_with_key(&pass, &path)
+                                            .into_boxed_str();
+                                        "key_path"
+                                    }
+                                };
+                                x.call_on_name(
+                                    name,
+                                    move |x: &mut TextView| {
+                                        x.set_content(
+                                            ::alloc::__export::must_use({
+                                                ::alloc::fmt::format(
+                                                    format_args!("Currently \"{0}\"", &path as &str),
+                                                )
+                                            }),
+                                        );
+                                    },
+                                );
+                            },
+                        )
+                        .dismiss_button("Cancel")
+                        .min_width(32)
+                        .max_width(64),
+                );
+            }
+        }
+        mod url {
+            use std::{
+                sync::{Arc, Mutex},
+                thread::spawn,
+            };
+            use cursive::{
+                Cursive, theme::{Effect, Style},
+                view::{Nameable, Resizable},
+                views::{
+                    Button, Dialog, DummyView, EditView, LinearLayout, ScrollView,
+                    TextView,
+                },
+            };
+            use zeroize::Zeroizing;
+            use crate::{
+                auth::argon::{decrypt_with_key, encrypt_with_key},
+                structs::{Config, db::AuthDbConfig},
+                ui::Ptr,
+            };
+            type DecryptedUrls = Arc<Mutex<Zeroizing<Vec<Box<str>>>>>;
+            pub fn url(pass: String, x: &mut Cursive) {
+                x.add_layer(Dialog::around(TextView::new("Decrypting...")));
+                let sink = x.cb_sink().clone();
+                let conf = x.user_data::<Ptr<Config>>().unwrap().clone();
+                let pass: Arc<str> = Arc::from(pass);
+                spawn(move || {
+                    let AuthDbConfig::Tikv { endpoints, .. } = &conf.database.authdb
+                    else {
+                        ::core::panicking::panic(
+                            "internal error: entered unreachable code",
+                        );
+                    };
+                    let decrypted = endpoints
+                        .iter()
+                        .map(|x| decrypt_with_key(&pass, &x as &str).into_boxed_str())
+                        .collect::<Vec<_>>();
+                    let decrypted = Arc::new(Mutex::new(Zeroizing::new(decrypted)));
+                    _ = sink
+                        .send(
+                            Box::new(move |x| {
+                                x.pop_layer();
+                                render(x, pass.clone(), decrypted);
+                            }),
+                        );
+                });
+            }
+            pub fn render(x: &mut Cursive, pass: Arc<str>, decrypted: DecryptedUrls) {
+                let mut layout = LinearLayout::vertical();
+                render_ui(&mut layout, decrypted.clone());
+                let decr = decrypted.clone();
+                x.add_layer(
+                    Dialog::around(ScrollView::new(layout.with_name("tikv_hostnames")))
+                        .title("Configure hostnames")
+                        .button(
+                            "New",
+                            move |x| {
+                                add_new(x, pass.clone(), decr.clone());
+                            },
+                        )
+                        .dismiss_button("Back")
+                        .full_screen(),
+                )
+            }
+            fn add_new(x: &mut Cursive, pass: Arc<str>, decr: DecryptedUrls) {
+                x.add_layer(
+                    Dialog::around(
+                            LinearLayout::vertical()
+                                .child(TextView::new("Enter the hostname"))
+                                .child(EditView::new().with_name("hostname")),
+                        )
+                        .button(
+                            "Add",
+                            move |x| {
+                                let hostname = x
+                                    .call_on_name(
+                                        "hostname",
+                                        |x: &mut EditView| x.get_content(),
+                                    )
+                                    .unwrap();
+                                let encrypted = encrypt_with_key(&pass, &hostname);
+                                let conf = x.user_data::<Ptr<Config>>().unwrap();
+                                let AuthDbConfig::Tikv { endpoints, .. } = &mut conf
+                                    .database
+                                    .authdb else {
+                                    ::core::panicking::panic(
+                                        "internal error: entered unreachable code",
+                                    );
+                                };
+                                let mut vect = endpoints.to_vec();
+                                vect.push(encrypted.clone().into_boxed_str());
+                                *endpoints = vect.into_boxed_slice();
+                                decr.lock()
+                                    .map_or_else(|x| x.into_inner(), |x| x)
+                                    .push(hostname.to_string().into_boxed_str());
+                                let decr = decr.clone();
+                                x.pop_layer();
+                                x.call_on_name(
+                                    "tikv_hostnames",
+                                    move |layout: &mut LinearLayout| {
+                                        render_ui(layout, decr.clone());
+                                    },
+                                );
+                            },
+                        )
+                        .dismiss_button("Cancel")
+                        .title("Add Hostname")
+                        .min_width(32)
+                        .max_width(64),
+                );
+            }
+            pub fn render_ui(layout: &mut LinearLayout, decrypted: DecryptedUrls) {
+                layout.clear();
+                layout
+                    .add_child(
+                        LinearLayout::horizontal()
+                            .child(
+                                TextView::new("Model ID")
+                                    .style(Style::merge(&[Effect::Dim.into()]))
+                                    .full_width(),
+                            )
+                            .child(
+                                TextView::new("Actions")
+                                    .style(Style::merge(&[Effect::Dim.into()]))
+                                    .fixed_width(10),
+                            ),
+                    );
+                let decr2 = decrypted.clone();
+                decrypted
+                    .lock()
+                    .map_or_else(|e| e.into_inner(), |v| v)
+                    .iter()
+                    .enumerate()
+                    .for_each(move |(index, x)| {
+                        let decr2 = decr2.clone();
+                        layout
+                            .add_child(
+                                LinearLayout::horizontal()
+                                    .child(TextView::new(x as &str).full_width())
+                                    .child(
+                                        Button::new_raw(
+                                                "Remove",
+                                                move |x| {
+                                                    let decr = decr2.clone();
+                                                    let conf = x.user_data::<Ptr<Config>>().unwrap();
+                                                    let AuthDbConfig::Tikv { endpoints, .. } = &mut conf
+                                                        .database
+                                                        .authdb else {
+                                                        ::core::panicking::panic(
+                                                            "internal error: entered unreachable code",
+                                                        );
+                                                    };
+                                                    let mut vect = endpoints.to_vec();
+                                                    vect.remove(index);
+                                                    decr.lock()
+                                                        .map_or_else(|x| x.into_inner(), |x| x)
+                                                        .remove(index);
+                                                    *endpoints = vect.into_boxed_slice();
+                                                    x.call_on_name(
+                                                        "tikv_hostnames",
+                                                        move |layout: &mut LinearLayout| {
+                                                            render_ui(layout, decr.clone());
+                                                        },
+                                                    );
+                                                },
+                                            )
+                                            .fixed_width(6),
+                                    )
+                                    .child(DummyView::new().fixed_width(4)),
+                            );
+                    });
+            }
+        }
         fn get_admin_pass(x: &mut Cursive, tocallnext: CallNext) {
             x.add_layer(
                 Dialog::around(
@@ -3656,7 +4116,7 @@ mod ui {
                     .title("Authentication Required")
                     .button(
                         "Continue",
-                        |x| {
+                        move |x| {
                             let pass = x
                                 .call_on_name(
                                     "admin_pass",
@@ -3676,7 +4136,16 @@ mod ui {
                                 );
                                 return;
                             }
+                            x.pop_layer();
                             let password = pass.to_string();
+                            match tocallnext {
+                                CallNext::Endpoints => {
+                                    url::url(password, x);
+                                }
+                                CallNext::TLSConf => {
+                                    tls::tls(password, x);
+                                }
+                            }
                         },
                     )
                     .dismiss_button("Cancel"),
@@ -3795,7 +4264,7 @@ mod ui {
                     ),
                 );
             let timeout = LinearLayout::horizontal()
-                .child(TextView::new("⊗ Timeout (in seconds)").full_width())
+                .child(TextView::new("🖧 Timeout (in seconds)").full_width())
                 .child(
                     Button::new_raw(
                             ::alloc::__export::must_use({
@@ -4978,7 +5447,13 @@ pub mod auth {
             out.extend(ciphertext_with_tag.into_iter());
             BASE64_STANDARD.encode(out)
         }
+        /// # WARNING
+        /// This functions returns an empty string if the data provided
+        /// is empty. Please be informed
         pub fn decrypt_with_key(pwd: &str, data: &str) -> String {
+            if data.is_empty() {
+                return String::new();
+            }
             let raw = BASE64_STANDARD.decode(data).unwrap();
             let salt_slice = &raw[0..SALT_LEN];
             let nonce_slice = &raw[SALT_LEN..(SALT_LEN + NONCE_LEN)];
@@ -5018,13 +5493,29 @@ pub mod auth {
                     AuthDbConfig::Mongodb { url } => {
                         *url = migrate_key(old_pass, new_pass, &url).into_boxed_str();
                     }
-                    AuthDbConfig::Tikv { endpoints, .. } => {
+                    AuthDbConfig::Tikv { endpoints, tls_config, .. } => {
                         endpoints
                             .iter_mut()
                             .for_each(|data| {
                                 *data = migrate_key(old_pass, new_pass, &data)
                                     .into_boxed_str();
                             });
+                        if let Some(conf) = tls_config {
+                            conf.ca_path = migrate_key(old_pass, new_pass, &conf.ca_path)
+                                .into_boxed_str();
+                            conf.cert_path = migrate_key(
+                                    old_pass,
+                                    new_pass,
+                                    &conf.cert_path,
+                                )
+                                .into_boxed_str();
+                            conf.key_path = migrate_key(
+                                    old_pass,
+                                    new_pass,
+                                    &conf.key_path,
+                                )
+                                .into_boxed_str();
+                        }
                     }
                     AuthDbConfig::Moka { .. } => {}
                 }
@@ -5055,12 +5546,20 @@ pub mod auth {
                     AuthDbConfig::Mongodb { url } => {
                         *url = decrypt_with_key(pass, &url).into_boxed_str();
                     }
-                    AuthDbConfig::Tikv { endpoints, .. } => {
+                    AuthDbConfig::Tikv { endpoints, tls_config, .. } => {
                         endpoints
                             .iter_mut()
                             .for_each(|data| {
                                 *data = decrypt_with_key(pass, &data).into_boxed_str();
                             });
+                        if let Some(conf) = tls_config {
+                            conf.ca_path = decrypt_with_key(pass, &conf.ca_path)
+                                .into_boxed_str();
+                            conf.cert_path = decrypt_with_key(pass, &conf.cert_path)
+                                .into_boxed_str();
+                            conf.key_path = decrypt_with_key(pass, &conf.key_path)
+                                .into_boxed_str();
+                        }
                     }
                     AuthDbConfig::Moka { .. } => {}
                 }
