@@ -296,6 +296,9 @@ enum CallNext {
   TLSConf,
 }
 
+mod tls;
+mod url;
+
 fn get_admin_pass(x: &mut Cursive, tocallnext: CallNext) {
   x.add_layer(
     Dialog::around(
@@ -304,7 +307,7 @@ fn get_admin_pass(x: &mut Cursive, tocallnext: CallNext) {
         .child(EditView::new().secret().with_name("admin_pass")),
     )
     .title("Authentication Required")
-    .button("Continue", |x| {
+    .button("Continue", move |x| {
       let pass = x
         .call_on_name("admin_pass", |x: &mut EditView| x.get_content())
         .unwrap();
@@ -320,7 +323,18 @@ fn get_admin_pass(x: &mut Cursive, tocallnext: CallNext) {
         return;
       }
 
+      x.pop_layer();
+
       let password = pass.to_string();
+
+      match tocallnext {
+        CallNext::Endpoints => {
+          url::url(password, x);
+        }
+        CallNext::TLSConf => {
+          tls::tls(password, x);
+        }
+      }
     })
     .dismiss_button("Cancel"),
   );
@@ -409,7 +423,7 @@ pub fn authdb_tikv(timeout: u64, tls_enabled: bool) -> impl View {
     }));
 
   let timeout = LinearLayout::horizontal()
-    .child(TextView::new("⊗ Timeout (in seconds)").full_width())
+    .child(TextView::new("🖧 Timeout (in seconds)").full_width())
     .child(
       Button::new_raw(format!("<{timeout}>"), |x| {
         x.add_layer(

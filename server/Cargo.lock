@@ -276,9 +276,11 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "chalk_rs",
+ "constant_time_eq",
  "crossbeam-channel",
  "cursive",
  "cursive-tabs",
+ "cursive_table_view",
  "ed25519-dalek",
  "fern",
  "futures",
@@ -734,6 +736,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "constant_time_eq"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
+
+[[package]]
 name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -952,6 +960,15 @@ dependencies = [
  "unicode-segmentation",
  "unicode-width",
  "xi-unicode",
+]
+
+[[package]]
+name = "cursive_table_view"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86a6cca21da26bb588502349d09b68574a3e55689ddeaeeb086af373e0ef6766"
+dependencies = [
+ "cursive_core",
 ]
 
 [[package]]

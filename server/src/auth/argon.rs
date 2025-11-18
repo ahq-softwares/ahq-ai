@@ -161,7 +161,16 @@ pub fn encrypt_with_key(pwd: &str, data: &str) -> String {
   BASE64_STANDARD.encode(out)
 }
 
+/// # WARNING
+/// This functions returns an empty string if the data provided
+/// is empty. Please be informed
 pub fn decrypt_with_key(pwd: &str, data: &str) -> String {
+  // WARNING
+  // A very powerful failsafe
+  if data.is_empty() {
+    return String::new();
+  }
+
   let raw = BASE64_STANDARD.decode(data).unwrap();
 
   let salt_slice = &raw[0..SALT_LEN];
@@ -215,10 +224,20 @@ pub fn migrate_config(old_pass: &str, new_pass: &str, config: &mut Config) {
       AuthDbConfig::Mongodb { url } => {
         *url = migrate_key(old_pass, new_pass, &url).into_boxed_str();
       }
-      AuthDbConfig::Tikv { endpoints, .. } => {
+      AuthDbConfig::Tikv {
+        endpoints,
+        tls_config,
+        ..
+      } => {
         endpoints.iter_mut().for_each(|data| {
           *data = migrate_key(old_pass, new_pass, &data).into_boxed_str();
         });
+
+        if let Some(conf) = tls_config {
+          conf.ca_path = migrate_key(old_pass, new_pass, &conf.ca_path).into_boxed_str();
+          conf.cert_path = migrate_key(old_pass, new_pass, &conf.cert_path).into_boxed_str();
+          conf.key_path = migrate_key(old_pass, new_pass, &conf.key_path).into_boxed_str();
+        }
       }
       AuthDbConfig::Moka { .. } => {}
     }
@@ -248,10 +267,20 @@ pub fn decrypt_config(pass: &str, config: &mut Config) {
       AuthDbConfig::Mongodb { url } => {
         *url = decrypt_with_key(pass, &url).into_boxed_str();
       }
-      AuthDbConfig::Tikv { endpoints, .. } => {
+      AuthDbConfig::Tikv {
+        endpoints,
+        tls_config,
+        ..
+      } => {
         endpoints.iter_mut().for_each(|data| {
           *data = decrypt_with_key(pass, &data).into_boxed_str();
         });
+
+        if let Some(conf) = tls_config {
+          conf.ca_path = decrypt_with_key(pass, &conf.ca_path).into_boxed_str();
+          conf.cert_path = decrypt_with_key(pass, &conf.cert_path).into_boxed_str();
+          conf.key_path = decrypt_with_key(pass, &conf.key_path).into_boxed_str();
+        }
       }
       AuthDbConfig::Moka { .. } => {}
     }

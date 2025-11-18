@@ -17,10 +17,12 @@ ed25519-dalek = "^2"
 
 rpassword = "^7"
 zeroize = { version = "^1", features = ["zeroize_derive", "alloc"] }
+constant_time_eq = "^0.4"
 secrecy = "^0.10"
 
 cursive = "^0.21"
 cursive-tabs = "^0.8"
+cursive_table_view = "^0.15"
 
 redis = { version = "^0.32", features = ["aio", "tokio-comp"] }
 tikv-client = "^0.3"

@@ -23,7 +23,11 @@
   "database": {
     "authdb": {
       "db": "tikv",
-      "endpoints": [],
+      "endpoints": [
+        "OPduGfk5KiNTs5ynEHot6nXXd8wamIlkhoTaWqMP+0xFfMIhXXRd6vYivmhO827RquiiHrWczb9ykXX/DHtgTpDgX0/18gIVd/o4cXlfcDFedhpS",
+        "/7BetxV5lW+Iq47uC3QlU8xdW/wwsQ62qwvO+eDc5P4E2AeueO4GrcjVe03r7dW0yj3Ak3D44uR+XAtBP38TXaH9xvhqLim4bE7HZ2WUcdvT0lqv",
+        "GtFOYKZLfMxdOwFOQsIW3t1xEhsY7rkTMOVG8B9fMxFQJPZQFJcSSMSf+O94XEdZZ9qp9XFBrOw27Kf8qyIQQu8bGOq+X50YjtLj77nlwwm5HxQi+g=="
+      ],
       "tls_config": {
         "ca_path": "",
         "cert_path": "",
