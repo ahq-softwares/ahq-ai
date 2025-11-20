@@ -3,7 +3,10 @@ use base64::DecodeError;
 use mongodb::error::Error as MongoDBError;
 use rand::rand_core::OsError;
 use redis::RedisError;
+use reqwest::header::InvalidHeaderValue;
 use thiserror::Error;
+
+use reqwest::Error as ReqwestError;
 
 use argon2::password_hash::Error as ArgonErr;
 use serde_json::Error as SerdeError;
@@ -18,11 +21,15 @@ pub enum ServerError {
   #[error(transparent)]
   Base64(#[from] DecodeError),
   #[error(transparent)]
+  ReqwestError(#[from] ReqwestError),
+  #[error(transparent)]
+  InvalidHeaderValue(#[from] InvalidHeaderValue),
+  #[error(transparent)]
   TokioJoinError(#[from] JoinError),
   #[error(transparent)]
   Std(#[from] StdError),
   #[error(transparent)]
-  Tikv(#[from] TikvError),
+  Tikv(#[from] Box<TikvError>),
   #[error(transparent)]
   MongoDB(#[from] MongoDBError),
   #[error(transparent)]
@@ -35,6 +42,12 @@ pub enum ServerError {
   ArgonErr(ArgonErr),
   #[error(transparent)]
   RngErr(#[from] OsError),
+}
+
+impl From<TikvError> for ServerError {
+  fn from(value: TikvError) -> Self {
+    Self::Tikv(Box::new(value))
+  }
 }
 
 impl actix_web::error::ResponseError for ServerError {

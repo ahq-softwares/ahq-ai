@@ -131,6 +131,7 @@ fn render(x: &mut Cursive, pass: Arc<str>, decrypted: Zeroizing<Tls>) {
   )
 }
 
+#[allow(clippy::enum_variant_names)]
 enum ToChange {
   CaPath,
   CertPath,

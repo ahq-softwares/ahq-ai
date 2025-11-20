@@ -12,32 +12,28 @@
   ],
   "admin_pass_hash": "$argon2id$v=19$m=32768,t=2,p=1$OG0Rq9RH17YzH68z4OQ4qQVzXDp04YtV4bZddJurR7c$egASkkoXrChmCVg30M738NK0zcusMXYYyBFTDBNtUoE",
   "llama": {
-    "models": {}
+    "models": {
+      "g4skQ9eX3mxoiECl6yORTP/HVaBALWDM": {
+        "name": "AHQ AI 1.0",
+        "url": "http://127.0.0.1:8080",
+        "capabilities": 4,
+        "apikey": null
+      }
+    }
   },
   "authentication": {
     "kind": "Account",
     "registration_allowed": true,
-    "max_memory": 64,
+    "max_memory": 128,
     "time_cost": 5
   },
   "database": {
     "authdb": {
-      "db": "tikv",
-      "endpoints": [
-        "OPduGfk5KiNTs5ynEHot6nXXd8wamIlkhoTaWqMP+0xFfMIhXXRd6vYivmhO827RquiiHrWczb9ykXX/DHtgTpDgX0/18gIVd/o4cXlfcDFedhpS",
-        "/7BetxV5lW+Iq47uC3QlU8xdW/wwsQ62qwvO+eDc5P4E2AeueO4GrcjVe03r7dW0yj3Ak3D44uR+XAtBP38TXaH9xvhqLim4bE7HZ2WUcdvT0lqv",
-        "GtFOYKZLfMxdOwFOQsIW3t1xEhsY7rkTMOVG8B9fMxFQJPZQFJcSSMSf+O94XEdZZ9qp9XFBrOw27Kf8qyIQQu8bGOq+X50YjtLj77nlwwm5HxQi+g=="
-      ],
-      "tls_config": {
-        "ca_path": "",
-        "cert_path": "",
-        "key_path": ""
-      },
-      "timeout_secs": 30
+      "db": "mongodb",
+      "url": "0dq8PIOVJ5ZocpeInQupwsvYsWGbIuK9a+8WHXlgOtc1xDwWlb11l91NrXqIT20C+8YT1AVWGVP3RI2cI3/wO635yYR88if592NPweh/4l1e1BD6aj4pi5Te9qW+lc6qOnCeLPjzMfMg+/+xQBQw5vZMN2vM82kNG9rIW3GPealBkEFwfknHXIyPjFwV2/E="
     },
     "cache": {
-      "db": "redis",
-      "url": ""
+      "db": "moka"
     }
   }
 }

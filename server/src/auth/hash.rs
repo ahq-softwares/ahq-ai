@@ -40,7 +40,7 @@ impl HashingAgent {
       thread::spawn(move || {
         let mut signer = SigningKey::from_keypair_bytes(INTEGRITY_KEY).unwrap();
 
-        let mut rng = OsRng::default();
+        let mut rng = OsRng;
 
         while let Ok(x) = rxc.recv() {
           match x {

@@ -69,18 +69,18 @@ pub fn render(l: &mut LinearLayout, can_register: bool, memory: u32, time: u32) 
                 .on_edit(|x, val, _| {
                   let state: &mut Ptr<Config> = x.user_data().unwrap();
 
-                  if let Ok(num) = val.parse::<u32>() {
-                    if num > 0 {
-                      let Authentication::Account { max_memory, .. } = &mut state.authentication
-                      else {
-                        unreachable!()
-                      };
-                      *max_memory = num;
+                  if let Ok(num) = val.parse::<u32>()
+                    && num > 0
+                  {
+                    let Authentication::Account { max_memory, .. } = &mut state.authentication
+                    else {
+                      unreachable!()
+                    };
+                    *max_memory = num;
 
-                      x.call_on_name("ram_usage", move |x: &mut Button| {
-                        x.set_label_raw(format!("[{num} MiB]"));
-                      });
-                    }
+                    x.call_on_name("ram_usage", move |x: &mut Button| {
+                      x.set_label_raw(format!("[{num} MiB]"));
+                    });
                   }
                 })
                 .on_submit(|x, _| {
@@ -106,18 +106,18 @@ pub fn render(l: &mut LinearLayout, can_register: bool, memory: u32, time: u32) 
                 .on_edit(|x, val, _| {
                   let state: &mut Ptr<Config> = x.user_data().unwrap();
 
-                  if let Ok(num) = val.parse::<u32>() {
-                    if num > 0 {
-                      let Authentication::Account { time_cost, .. } = &mut state.authentication
-                      else {
-                        unreachable!()
-                      };
-                      *time_cost = num;
+                  if let Ok(num) = val.parse::<u32>()
+                    && num > 0
+                  {
+                    let Authentication::Account { time_cost, .. } = &mut state.authentication
+                    else {
+                      unreachable!()
+                    };
+                    *time_cost = num;
 
-                      x.call_on_name("time", move |x: &mut Button| {
-                        x.set_label_raw(format!("<{num}>"));
-                      });
-                    }
+                    x.call_on_name("time", move |x: &mut Button| {
+                      x.set_label_raw(format!("<{num}>"));
+                    });
                   }
                 })
                 .on_submit(|x, _| {

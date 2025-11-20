@@ -28,7 +28,7 @@ pub fn launch(data: Ptr<Config>) -> ResizedView<Dialog> {
   Dialog::new()
     .content(ScrollView::new(layout.with_name("renderedtable")).show_scrollbars(true))
     .button("New", move |s| {
-      if let Some(_) = s1.admin_pass_hash {
+      if s1.admin_pass_hash.is_some() {
         s.add_layer(new_server(s1.clone(), None));
       } else {
         s.add_layer(
@@ -214,10 +214,10 @@ pub fn new_server(conf: Ptr<Config>, key: Option<String>) -> ResizedView<Resized
         x.add_child(
           EditView::new()
             .with(move |x| {
-              if let Some(data) = l3 {
-                if data.apikey.is_some() {
-                  x.set_content("< unchanged >");
-                }
+              if let Some(data) = l3
+                && data.apikey.is_some()
+              {
+                x.set_content("< unchanged >");
               }
             })
             .with_name("api_key"),
@@ -296,7 +296,7 @@ pub fn new_server(conf: Ptr<Config>, key: Option<String>) -> ResizedView<Resized
       let mut key = None;
       if api.as_str() != "" {
         if api.as_str() == "< unchanged >" {
-          if let Some(x) = l7.clone().map(|x| x.apikey.clone()).flatten() {
+          if let Some(x) = l7.clone().and_then(|x| x.apikey.clone()) {
             // Use the encrypted api key
             key = Some(x);
           } else {

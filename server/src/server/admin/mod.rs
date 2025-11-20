@@ -50,7 +50,7 @@ struct AdminDeleteRequest<'a> {
   unique_id: String,
 }
 
-async fn verify_auth<'a>(passwd: &'a str) -> Result<(), HttpResponse> {
+async fn verify_auth(passwd: &str) -> Result<(), HttpResponse> {
   let value = REAL_ADMIN_PASSWORD
     .get()
     .map(|x| async move { passwd == x.read().await.expose_secret() });
@@ -99,24 +99,21 @@ async fn list(body: Bytes) -> Result<impl Responder> {
   Ok(HttpResponse::ServiceUnavailable().body::<&[u8]>(br#"{ "msg": "Auth is disabled" }"#))
 }
 
-fn user_list_stream<'a>(
+fn user_list_stream(
   auth: &'static AuthSessionManager,
   prefix: String,
 ) -> impl Stream<Item = Result<Bytes>> {
   stream! {
-    let mut index = 0usize;
-    for uid in auth.accounts.search(prefix).await? {
+    for (index, uid) in auth.accounts.search(prefix).await?.into_iter().enumerate() {
       if index != 0 {
         yield Ok(Bytes::from_static(b"\n"));
       }
 
       yield Ok(Bytes::from_owner(uid));
 
-      if index % 30 == 0 {
+      if index.is_multiple_of(30) {
         yield_now().await;
       }
-
-      index += 1;
     }
   }
 }

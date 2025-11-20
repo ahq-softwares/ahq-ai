@@ -3,6 +3,7 @@ use crate::{
     AuthSessionManager,
     argon::{self, server::verify_server_pass},
   },
+  server::apiset::{ApiMap, genapimap},
   structs::{Authentication, Config},
 };
 use actix_web::{App, HttpServer, web};
@@ -20,12 +21,14 @@ use zeroize::Zeroize;
 
 pub mod admin;
 pub mod auth;
-// pub mod chat;
+pub mod chat;
 pub mod http;
 
 pub mod llama;
 
 pub mod ffi;
+
+pub mod apiset;
 
 // This is the encrypted config
 pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
@@ -34,7 +37,9 @@ pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
   from_str(&data).expect("Invalid configuration file, unable to parse")
 });
 
-pub static DECRYPTED_CONFIG: LazyLock<RwLock<Config>> = LazyLock::new(|| decrypt_config());
+pub static DECRYPTED_CONFIG: LazyLock<RwLock<Config>> = LazyLock::new(decrypt_config);
+
+pub static API_MAP: LazyLock<ApiMap> = LazyLock::new(genapimap);
 
 pub static AUTH: OnceLock<AuthSessionManager> = OnceLock::new();
 
@@ -89,6 +94,14 @@ pub async fn main() -> std::io::Result<()> {
 
   info!("Decryption successful...");
 
+  info!("Creating API Map eagerly...");
+
+  // Explicitly trigger the LazyLock initialization now that the password is set
+  // This guarantees decryption before the server starts.
+  let cap = API_MAP.len();
+
+  info!("Api Map Created! Created {cap} keys");
+
   let auth = !matches!(CONFIG.authentication, Authentication::OpenToAll);
   let mut registration_api = false;
 
@@ -109,7 +122,7 @@ pub async fn main() -> std::io::Result<()> {
   let mut server = HttpServer::new(move || {
     let mut app = App::new()
       .service(http::index)
-      // .route("/chat", web::get().to(chat::chat))
+      .route("/chat", web::get().to(chat::chat))
       .service(http::challenge)
       .service(http::me);
 

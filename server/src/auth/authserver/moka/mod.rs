@@ -10,6 +10,12 @@ pub struct MokaTestingDB {
   cache: Cache<String, String>,
 }
 
+impl Default for MokaTestingDB {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl MokaTestingDB {
   pub fn new() -> Self {
     Self {

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::LazyLock};
+use std::sync::LazyLock;
 
 use serde::Serialize;
 
@@ -10,27 +10,32 @@ pub enum ShowedAuth {
   Account,
 }
 
-pub static ROOT_RESPONSE_DATA: LazyLock<Vec<u8>> = LazyLock::new(|| {
-  let root_response = RootResponse::new();
-
-  serde_json::to_vec(&root_response).expect("Failed to serialize static RootResponse")
-});
+pub static ROOT_RESPONSE_DATA: LazyLock<Vec<u8>> = LazyLock::new(RootResponse::compile);
 
 #[derive(Serialize)]
-pub struct RootResponse {
+pub struct Model<'a> {
+  #[serde(borrow)]
+  id: &'a str,
+  #[serde(borrow)]
+  name: &'a str,
+  capabilities: u16,
+}
+
+#[derive(Serialize)]
+pub struct RootResponse<'a> {
   version: &'static str,
   auth: ShowedAuth,
   can_register: bool,
-  models: HashMap<Box<str>, u16>,
+  models: Vec<Model<'a>>,
 }
 
-impl RootResponse {
-  pub fn new() -> Self {
+impl<'a> RootResponse<'a> {
+  pub fn compile() -> Vec<u8> {
     let mut out = Self {
       version: env!("CARGO_PKG_VERSION"),
       auth: ShowedAuth::OpenToAll,
       can_register: false,
-      models: HashMap::new(),
+      models: vec![],
     };
 
     match CONFIG.authentication {
@@ -47,9 +52,13 @@ impl RootResponse {
     }
 
     CONFIG.llama.models.iter().for_each(|(key, value)| {
-      _ = out.models.insert(key.to_owned(), value.capabilities.0);
+      out.models.push(Model {
+        id: key as &str,
+        name: &value.name,
+        capabilities: value.capabilities.0,
+      });
     });
 
-    out
+    serde_json::to_vec(&out).expect("Failed to serialize static RootResponse")
   }
 }

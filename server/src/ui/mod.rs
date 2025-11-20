@@ -360,7 +360,7 @@ pub fn ui() {
     );
   }
 
-  if let None = &config.admin_pass_hash {
+  if config.admin_pass_hash.is_none() {
     siv.add_layer(
       Dialog::around(
         LinearLayout::vertical()

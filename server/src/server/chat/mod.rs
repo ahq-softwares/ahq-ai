@@ -1,216 +1,204 @@
-// use crate::server::{
-//   AUTH, CONFIG, HISTORY_LENGTH,
-//   chat::ollama::{Message, OllamaMsgResp, OllamaRequest},
-// };
-// use actix_web::{HttpRequest, HttpResponse, Result, rt, web::Payload};
-// use actix_ws::{AggregatedMessage, Session};
+use crate::{
+  server::{
+    AUTH, CONFIG, llama::{LlamaChatHandler, structs::LlamaRequest}
+  },
+  structs::Capabilities,
+};
+use log::error;
 
-// pub mod ollama;
+#[cfg(debug_assertions)]
+use log::debug;
 
-// pub async fn chat(req: HttpRequest, stream: Payload) -> Result<HttpResponse> {
-//   let headers = req.headers();
+use actix_web::{
+  HttpRequest, HttpResponse, Result,
+  http::{StatusCode, header::ContentType},
+  rt,
+  web::Payload,
+};
+use actix_ws::{AggregatedMessage, Session};
 
-//   let (Some(session), Some(model)) = (headers.get("Authorization"), headers.get("model")) else {
-//     return Ok(
-//       HttpResponse::Unauthorized()
-//         .body("{\"msg\": \"Headers `Authorization`, `model` are necessary\"}"),
-//     );
-//   };
+const MISSING_HEADERS_BODY: &str = r#"{ "msg": "Headers `Authorization`, `model` are necessary" }"#;
+const INVALID_SESSION_BODY: &str = r#"{ "msg": "Invalid SessionToken" }"#;
+const MODEL_NOT_FOUND_BODY: &str = r#"{ "msg": "Model not found!" }"#;
+const INVALID_MODEL_BODY: &str = r#"{ "msg": "Invalid `model` header" }"#;
+const INVALID_SESSION_HEADER_BODY: &str = r#"{ "msg": "Invalid `session` header" }"#;
 
-//   let Ok(model) = model.to_str() else {
-//     return Ok(HttpResponse::Unauthorized().body("{\"msg\": \"Invalid `model` header\"}"));
-//   };
+const INVALID_WS_RESP: &str = r#"{ "msg": "Unexpected WebSocket data" }"#;
 
-//   let Ok(session) = session.to_str() else {
-//     return Ok(HttpResponse::Unauthorized().body("{\"msg\": \"Invalid `session` header\"}"));
-//   };
+fn json_response(status: StatusCode, body: &'static str) -> HttpResponse {
+  HttpResponse::build(status)
+    .content_type(ContentType::json())
+    .body(body)
+}
 
-//   if let Some(auth) = AUTH.get()
-//     && !auth.verify_session(session).await
-//   {
-//     return Ok(HttpResponse::Unauthorized().body("{\"msg\": \"Invalid SessionToken\"}"));
-//   }
+pub async fn chat(req: HttpRequest, stream: Payload) -> Result<HttpResponse> {
+  let headers = req.headers();
 
-//   // Checks if the Model is capable of handling images
-//   let img_capable;
+  let (Some(session), Some(model)) = (headers.get("Authorization"), headers.get("model")) else {
+    return Ok(json_response(
+      StatusCode::UNAUTHORIZED,
+      MISSING_HEADERS_BODY,
+    ));
+  };
 
-//   if CONFIG.ollama.cvmodels.contains(model) {
-//     img_capable = true;
-//   } else if CONFIG.ollama.txtmodels.contains(model) {
-//     img_capable = false;
-//   } else {
-//     return Ok(HttpResponse::NotFound().body("{\"msg\": \"Model not found!\"}"));
-//   }
+  let Ok(model) = model.to_str() else {
+    return Ok(json_response(StatusCode::UNAUTHORIZED, INVALID_MODEL_BODY));
+  };
 
-//   let model = model.to_owned();
+  let Ok(session) = session.to_str() else {
+    return Ok(json_response(
+      StatusCode::UNAUTHORIZED,
+      INVALID_SESSION_HEADER_BODY,
+    ));
+  };
 
-//   let (res, mut session, stream) = actix_ws::handle(&req, stream)?;
+  if let Some(auth) = AUTH.get()
+    && !auth.verify_session(session).await
+  {
+    return Ok(json_response(
+      StatusCode::UNAUTHORIZED,
+      INVALID_SESSION_BODY,
+    ));
+  }
 
-//   let mut stream = stream
-//     .aggregate_continuations()
-//     // 8 MB data size max
-//     .max_continuation_size(8 * 1024 * 1024);
+  // Checks if the Model is capable of handling images
+  let cap;
+  let mut chat;
 
-//   // Launch a new async task
-//   rt::spawn(async move {
-//     let mut model = model;
-//     let img_capable = img_capable;
-//     let mut init = false;
+  if let Some(x) = CONFIG.llama.models.get(model) {
+    chat = LlamaChatHandler::new(model)?;
 
-//     // Max HISTORY_LENGTH messages
-//     let mut history = Vec::with_capacity(*HISTORY_LENGTH);
+    // Very cheap to clone
+    cap = x.capabilities.clone();
+  } else {
+    return Ok(json_response(StatusCode::NOT_FOUND, MODEL_NOT_FOUND_BODY));
+  }
 
-//     while let Some(msg) = stream.recv().await {
-//       match msg {
-//         Ok(AggregatedMessage::Text(x)) => {
-//           let Ok::<OllamaRequest, _>(x) = serde_json::from_reader(&*x.into_bytes()) else {
-//             break;
-//           };
+  let (res, mut session, stream) = actix_ws::handle(&req, stream)?;
 
-//           model = handle_msg(
-//             model,
-//             &mut history,
-//             img_capable,
-//             &mut init,
-//             x,
-//             &mut session,
-//           )
-//           .await;
-//         }
-//         Ok(AggregatedMessage::Close(_)) => break,
-//         Ok(AggregatedMessage::Ping(_)) => break,
-//         Ok(AggregatedMessage::Pong(_)) => break,
-//         _ => break,
-//       }
+  let mut stream = stream
+    .aggregate_continuations()
+    // 30 MB data size max
+    .max_continuation_size(30 * 1024 * 1024);
 
-//       if model.is_empty() {
-//         break;
-//       }
-//     }
-//     _ = session.close(None).await;
-//   });
+  // Launch a new async task
+  rt::spawn(async move {
+    let mut init = false;
 
-//   Ok(res)
-// }
+    #[cfg(debug_assertions)]
+    debug!("Starting up websocket connection");
 
-// async fn handle_msg(
-//   model: String,
-//   history: &mut Vec<ChatMessage>,
-//   img_capable: bool,
-//   init: &mut bool,
-//   msg: OllamaRequest,
-//   session: &mut Session,
-// ) -> String {
-//   match handle_msg_faillable(model, history, img_capable, init, msg, session).await {
-//     Some(model) => model,
-//     _ => {
-//       _ = session.text(r#"{ "msg": "Internal Server Error" }"#).await;
+    while let Some(msg) = stream.recv().await {
+      match msg {
+        Ok(AggregatedMessage::Text(x)) => {
+          let Ok::<LlamaRequest, _>(x) = serde_json::from_reader(&*x.into_bytes()) else {
+            break;
+          };
 
-//       String::with_capacity(0)
-//     }
-//   }
-// }
+          let should_close = handle_msg(cap.clone(), &mut init, x, &mut chat, &mut session).await;
 
-// async fn handle_msg_faillable(
-//   model: String,
-//   history: &mut Vec<ChatMessage>,
-//   img_capable: bool,
-//   init: &mut bool,
-//   msg: OllamaRequest,
-//   session: &mut Session,
-// ) -> Option<String> {
-//   match msg {
-//     OllamaRequest::Init { history: hist } => {
-//       if *init {
-//         _ = session.text(r#"{ "msg": "Already initialized" }"#).await;
+          if should_close {
+            break;
+          }
+        }
+        Ok(AggregatedMessage::Close(_)) => break,
+        Ok(AggregatedMessage::Ping(_)) => continue, // Ping/Pong don't need a break
+        Ok(AggregatedMessage::Pong(_)) => continue, // Use 'continue' to keep the loop going
+        Ok(_) => {
+          _ = session.text(INVALID_WS_RESP).await;
+          break;
+        } // Catch any unexpected AggregatedMessage (e.g., Binary) and close cleanly
+        Err(e) => {
+          // Log the stream error here! Use a proper logging crate (e.g., tracing)
+          error!("WebSocket stream error: {:?}", e);
+          break;
+        }
+      }
+    }
 
-//         return Some(model);
-//       }
+    #[cfg(debug_assertions)]
+    debug!("Cleaning up websocket connection");
 
-//       if hist.len() > *HISTORY_LENGTH {
-//         _ = session
-//             .text(r#"{ "msg": "Max History length reached" }"#)
-//             .await;
+    _ = session.close(None).await;
+  });
 
-//         return Some(model);
-//       }
+  Ok(res)
+}
 
-//       *init = true;
-//       history.extend(hist.into_iter().map(|x| match x {
-//         Message::User { message, images } => {
-//           let mut msg = ChatMessage::new(MessageRole::User, message);
+async fn handle_msg(
+  cap: Capabilities,
+  init: &mut bool,
+  msg: LlamaRequest,
+  hwnd: &mut LlamaChatHandler,
+  session: &mut Session,
+) -> bool {
+  handle_msg_faillable(cap, init, msg, hwnd, session)
+    .await
+    .is_none()
+}
 
-//           if let Some(images) = images {
-//             msg = msg.with_images(
-//               images
-//                 .into_iter()
-//                 .map(Image::from_base64)
-//                 .collect::<Vec<_>>(),
-//             )
-//           }
+async fn handle_msg_faillable(
+  cap: Capabilities,
+  init: &mut bool,
+  msg: LlamaRequest,
+  hwnd: &mut LlamaChatHandler,
+  session: &mut Session,
+) -> Option<()> {
+  match msg {
+    LlamaRequest::Init { history: hist } => {
+      if *init {
+        _ = session.text(r#"{ "msg": "Already initialized" }"#).await;
 
-//           msg
-//         }
-//         Message::System { prompt } => ChatMessage::new(MessageRole::System, prompt),
-//         Message::Assistant { message, thinking } => {
-//           let mut msg = ChatMessage::new(MessageRole::Assistant, message);
+        return None;
+      }
 
-//           msg.thinking = thinking;
+      *init = true;
+      hwnd.msg.extend(hist.into_iter());
 
-//           msg
-//         }
-//       }));
+      Some(())
+    }
+    LlamaRequest::ChatCompletion {
+      prompt,
+      attachments,
+    } => {
+      if !*init {
+        _ = session
+          .text(r#"{ "msg": "Initialization Required" }"#)
+          .await;
+        return None;
+      }
 
-//       Some(model)
-//     }
-//     OllamaRequest::ChatCompletion { prompt, images } => {
-//       if !*init {
-//         _ = session
-//             .text(r#"{ "msg": "Initialization Required" }"#)
-//             .await;
+      Some(())
 
-//         return Some(model);
-//       }
+      // let mut message = ChatMessage::user(prompt);
 
-//       if history.len() > *HISTORY_LENGTH {
-//         _ = session
-//             .text(r#"{ "msg": "Maximum message length reached!" }"#)
-//             .await;
-          
-//         return None;
-//       }
+      // if let Some(images) = images {
+      //   if !img_capable {
+      //     _ = session
+      //         .text(r#"{ "msg": "The model is not image capable" }"#)
+      //         .await;
+      //     return None;
+      //   }
 
-//       let mut message = ChatMessage::user(prompt);
+      //   message = message.with_images(
+      //     images
+      //       .into_iter()
+      //       .map(Image::from_base64)
+      //       .collect::<Vec<_>>(),
+      //   );
+      // }
 
-//       if let Some(images) = images {
-//         if !img_capable {
-//           _ = session
-//               .text(r#"{ "msg": "The model is not image capable" }"#)
-//               .await;
-//           return None;
-//         }
+      // let resp = OLLAMA
+      //   .send_chat_messages_with_history(history, ChatMessageRequest::new(model, vec![message]))
+      //   .await
+      //   .ok()?;
 
-//         message = message.with_images(
-//           images
-//             .into_iter()
-//             .map(Image::from_base64)
-//             .collect::<Vec<_>>(),
-//         );
-//       }
+      // let out = OllamaMsgResp {
+      //   content: resp.message.content,
+      //   thinking: resp.message.thinking,
+      // };
 
-//       let resp = OLLAMA
-//         .send_chat_messages_with_history(history, ChatMessageRequest::new(model, vec![message]))
-//         .await
-//         .ok()?;
-
-//       let out = OllamaMsgResp {
-//         content: resp.message.content,
-//         thinking: resp.message.thinking,
-//       };
-
-//       _ = session.text(serde_json::to_string(&out).ok()?).await;
-
-//       Some(resp.model)
-//     }
-//   }
-// }
+      // _ = session.text(serde_json::to_string(&out).ok()?).await;
+    }
+  }
+}

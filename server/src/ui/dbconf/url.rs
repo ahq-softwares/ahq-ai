@@ -33,7 +33,7 @@ pub fn url(pass: String, x: &mut Cursive) {
 
     let decrypted = endpoints
       .iter()
-      .map(|x| decrypt_with_key(&pass, &x as &str).into_boxed_str())
+      .map(|x| decrypt_with_key(&pass, x).into_boxed_str())
       .collect::<Vec<_>>();
     let decrypted = Arc::new(Mutex::new(Zeroizing::new(decrypted)));
 
@@ -89,7 +89,7 @@ fn add_new(x: &mut Cursive, pass: Arc<str>, decr: DecryptedUrls) {
 
       decr
         .lock()
-        .map_or_else(|x| x.into_inner(), |x| x)
+        .unwrap_or_else(|x| x.into_inner())
         .push(hostname.to_string().into_boxed_str());
 
       let decr = decr.clone();
@@ -128,7 +128,7 @@ pub fn render_ui(layout: &mut LinearLayout, decrypted: DecryptedUrls) {
 
   decrypted
     .lock()
-    .map_or_else(|e| e.into_inner(), |v| v)
+    .unwrap_or_else(|x| x.into_inner())
     .iter()
     .enumerate()
     .for_each(move |(index, x)| {
@@ -150,10 +150,7 @@ pub fn render_ui(layout: &mut LinearLayout, decrypted: DecryptedUrls) {
 
               vect.remove(index);
 
-              decr
-                .lock()
-                .map_or_else(|x| x.into_inner(), |x| x)
-                .remove(index);
+              decr.lock().unwrap_or_else(|x| x.into_inner()).remove(index);
 
               *endpoints = vect.into_boxed_slice();
 

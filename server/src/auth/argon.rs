@@ -63,9 +63,9 @@ pub fn hash_pass(pwd: &str, rng: &mut OsRng) -> Returns<String> {
   let data: String = HASHARGON
     .hash_password(
       pwd.as_bytes(),
-      &SaltString::encode_b64(&salt_bytes).map_err(|x| ServerError::ArgonErr(x))?,
+      &SaltString::encode_b64(&salt_bytes).map_err(ServerError::ArgonErr)?,
     )
-    .map_err(|x| ServerError::ArgonErr(x))?
+    .map_err(ServerError::ArgonErr)?
     .to_string();
 
   Ok(data)
@@ -74,7 +74,7 @@ pub fn hash_pass(pwd: &str, rng: &mut OsRng) -> Returns<String> {
 pub fn verify(pwd: &str, hash: &str) -> Returns<bool> {
   Ok(
     PasswordHash::new(hash)
-      .map_err(|x| ServerError::ArgonErr(x))?
+      .map_err(ServerError::ArgonErr)?
       .verify_password(&[&*HASHARGON], pwd)
       .ok()
       .is_some(),
@@ -92,14 +92,14 @@ pub mod server {
   pub fn hash_server_pass(pwd: &str) -> Returns<String> {
     let mut salt_bytes = [0u8; SALT_LEN];
 
-    OsRng::default().try_fill_bytes(&mut salt_bytes)?;
+    OsRng.try_fill_bytes(&mut salt_bytes)?;
 
     let data: String = KEYARGON
       .hash_password(
         pwd.as_bytes(),
-        &SaltString::encode_b64(&salt_bytes).map_err(|x| ServerError::ArgonErr(x))?,
+        &SaltString::encode_b64(&salt_bytes).map_err(ServerError::ArgonErr)?,
       )
-      .map_err(|x| ServerError::ArgonErr(x))?
+      .map_err(ServerError::ArgonErr)?
       .to_string();
 
     Ok(data)
@@ -109,7 +109,7 @@ pub mod server {
   pub fn verify_server_pass(pwd: &str, hash: &str) -> Returns<bool> {
     Ok(
       PasswordHash::new(hash)
-        .map_err(|x| ServerError::ArgonErr(x))?
+        .map_err(ServerError::ArgonErr)?
         .verify_password(&[&*KEYARGON], pwd)
         .ok()
         .is_some(),
@@ -123,7 +123,7 @@ pub fn encrypt_with_key(pwd: &str, data: &str) -> String {
   let salt = {
     let mut salt_bytes = [0u8; SALT_LEN];
 
-    OsRng::default().try_fill_bytes(&mut salt_bytes).unwrap();
+    OsRng.try_fill_bytes(&mut salt_bytes).unwrap();
 
     salt_bytes
   };
@@ -143,7 +143,7 @@ pub fn encrypt_with_key(pwd: &str, data: &str) -> String {
   let nonce_slice = {
     let mut nonce_slice = [0u8; NONCE_LEN];
 
-    OsRng::default().try_fill_bytes(&mut nonce_slice).unwrap();
+    OsRng.try_fill_bytes(&mut nonce_slice).unwrap();
 
     nonce_slice
   };
@@ -156,7 +156,7 @@ pub fn encrypt_with_key(pwd: &str, data: &str) -> String {
 
   let mut out = Vec::from(salt);
   out.extend(nonce_slice);
-  out.extend(ciphertext_with_tag.into_iter());
+  out.extend(ciphertext_with_tag);
 
   BASE64_STANDARD.encode(out)
 }
@@ -214,7 +214,7 @@ pub fn migrate_config(old_pass: &str, new_pass: &str, config: &mut Config) {
   {
     config.llama.models.iter_mut().for_each(|(_, v)| {
       if let Some(api) = &mut v.apikey {
-        *api = migrate_key(old_pass, new_pass, &api).into_boxed_str();
+        *api = migrate_key(old_pass, new_pass, api).into_boxed_str();
       }
     });
   }
@@ -222,7 +222,7 @@ pub fn migrate_config(old_pass: &str, new_pass: &str, config: &mut Config) {
   {
     match &mut config.database.authdb {
       AuthDbConfig::Mongodb { url } => {
-        *url = migrate_key(old_pass, new_pass, &url).into_boxed_str();
+        *url = migrate_key(old_pass, new_pass, url).into_boxed_str();
       }
       AuthDbConfig::Tikv {
         endpoints,
@@ -230,7 +230,7 @@ pub fn migrate_config(old_pass: &str, new_pass: &str, config: &mut Config) {
         ..
       } => {
         endpoints.iter_mut().for_each(|data| {
-          *data = migrate_key(old_pass, new_pass, &data).into_boxed_str();
+          *data = migrate_key(old_pass, new_pass, data).into_boxed_str();
         });
 
         if let Some(conf) = tls_config {
@@ -247,7 +247,7 @@ pub fn migrate_config(old_pass: &str, new_pass: &str, config: &mut Config) {
     match &mut config.database.cache {
       CacheConfig::Moka => {}
       CacheConfig::Redis { url } => {
-        *url = migrate_key(old_pass, new_pass, &url).into_boxed_str();
+        *url = migrate_key(old_pass, new_pass, url).into_boxed_str();
       }
     }
   }
@@ -257,7 +257,12 @@ pub fn decrypt_config(pass: &str, config: &mut Config) {
   {
     config.llama.models.iter_mut().for_each(|(_, v)| {
       if let Some(api) = &mut v.apikey {
-        *api = decrypt_with_key(pass, &api).into_boxed_str();
+        let mut api_ = decrypt_with_key(pass, api);
+        let api2 = format!("Bearer {api_}");
+
+        *api = api2.into_boxed_str();
+
+        api_.zeroize();
       }
     });
   }
@@ -265,7 +270,7 @@ pub fn decrypt_config(pass: &str, config: &mut Config) {
   {
     match &mut config.database.authdb {
       AuthDbConfig::Mongodb { url } => {
-        *url = decrypt_with_key(pass, &url).into_boxed_str();
+        *url = decrypt_with_key(pass, url).into_boxed_str();
       }
       AuthDbConfig::Tikv {
         endpoints,
@@ -273,7 +278,7 @@ pub fn decrypt_config(pass: &str, config: &mut Config) {
         ..
       } => {
         endpoints.iter_mut().for_each(|data| {
-          *data = decrypt_with_key(pass, &data).into_boxed_str();
+          *data = decrypt_with_key(pass, data).into_boxed_str();
         });
 
         if let Some(conf) = tls_config {
@@ -290,7 +295,7 @@ pub fn decrypt_config(pass: &str, config: &mut Config) {
     match &mut config.database.cache {
       CacheConfig::Moka => {}
       CacheConfig::Redis { url } => {
-        *url = decrypt_with_key(pass, &url).into_boxed_str();
+        *url = decrypt_with_key(pass, url).into_boxed_str();
       }
     }
   }

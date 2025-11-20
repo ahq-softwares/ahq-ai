@@ -26,9 +26,9 @@ pub mod hash;
 pub mod authserver;
 pub mod cache;
 
-pub static INTEGRITY_KEY: &'static [u8; 64] = include_bytes!("./key.bin");
+pub static INTEGRITY_KEY: &[u8; 64] = include_bytes!("./key.bin");
 
-pub static AGENT: LazyLock<HashingAgent> = LazyLock::new(|| HashingAgent::new());
+pub static AGENT: LazyLock<HashingAgent> = LazyLock::new(HashingAgent::new);
 
 const TOKEN_ID_LENGTH: usize = 12;
 
@@ -59,23 +59,20 @@ pub type AccountOrToken = (Box<str>, Box<str>);
 
 impl AuthSessionManager {
   pub async fn create() -> Self {
-    let accounts: Box<dyn AuthServer + Send + Sync>;
-    let sessions: Box<dyn AsyncCaching + Send + Sync>;
-
-    match &CONFIG.database.authdb {
+    let accounts: Box<dyn AuthServer + Send + Sync> = match &CONFIG.database.authdb {
       AuthDbConfig::Moka {} => {
         warn!(
           "CRITICAL WARNING! YOU ARE USING MOKA DB WHICH NEITHER HAS PERSISTENCE NOR IS RECOMMENDED FOR PRODUCTION IN ANY MEANS. PLEASE SHIFT TO A MORE ROBUST DB IMPLEMENTATION LIKE MONGODB OR TIKV FOR EVEN A HOBBY SERVER."
         );
-        accounts = Box::new(MokaTestingDB::new());
+        Box::new(MokaTestingDB::new())
       }
-      AuthDbConfig::Mongodb { .. } => accounts = Box::new(MongodbClient::new().await),
-      AuthDbConfig::Tikv { .. } => accounts = Box::new(TikvClient::new().await),
+      AuthDbConfig::Mongodb { .. } => Box::new(MongodbClient::new().await),
+      AuthDbConfig::Tikv { .. } => Box::new(TikvClient::new().await),
     };
 
-    match &CONFIG.database.cache {
-      CacheConfig::Moka => sessions = Box::new(MokaSessions::new()),
-      CacheConfig::Redis { .. } => sessions = Box::new(RedisSessions::new().await),
+    let sessions: Box<dyn AsyncCaching + Send + Sync> = match &CONFIG.database.cache {
+      CacheConfig::Moka => Box::new(MokaSessions::new()),
+      CacheConfig::Redis { .. } => Box::new(RedisSessions::new().await),
     };
 
     Self {
@@ -245,7 +242,7 @@ pub async fn gen_auth_token(cpufarm: &HashingAgent) -> Returns<(String, (String,
   let hashed = cpufarm
     .gen_hash(&token)
     .await
-    .map_or_else(|| Err(ServerError::StringConvertErr), |x| Ok(x))?;
+    .map_or_else(|| Err(ServerError::StringConvertErr), Ok)?;
 
   let token_to_output = format!("{token_key}.{token}");
 

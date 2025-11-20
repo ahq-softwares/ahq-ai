@@ -35,7 +35,7 @@ impl TikvClient {
     };
 
     if *timeout_secs > 0 {
-      config.timeout = Duration::from_secs(*timeout_secs as u64);
+      config.timeout = Duration::from_secs(*timeout_secs);
     }
 
     if let Some(tls) = tls_config {
@@ -62,7 +62,7 @@ impl AuthServer for TikvClient {
   async fn get<'a>(&'a self, uid: &'a str) -> Returns<Option<String>> {
     let out = self.raw.get(uid.to_owned()).await?;
 
-    Ok(out.map(|x| String::from_utf8(x).ok()).flatten())
+    Ok(out.and_then(|x| String::from_utf8(x).ok()))
   }
 
   async fn search<'a>(&'a self, prefix: String) -> Returns<Vec<Vec<u8>>> {

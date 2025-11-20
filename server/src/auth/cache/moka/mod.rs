@@ -9,6 +9,12 @@ pub struct MokaSessions {
   cache: Cache<String, String>,
 }
 
+impl Default for MokaSessions {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 impl MokaSessions {
   pub fn new() -> Self {
     Self {
