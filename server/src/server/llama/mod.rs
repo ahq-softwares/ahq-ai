@@ -1,3 +1,5 @@
+use log::warn;
+
 use crate::{
   server::{
     API_MAP,
@@ -52,10 +54,16 @@ impl LlamaChatHandler {
     let mut count = 0;
 
     for choice in response.choices {
-      if choice.finish_reason.as_ref() == "stop" {
-        count += 1usize;
-        // Directly append response
-        self.msg.push(choice.message);
+      match choice.finish_reason.as_ref() {
+        "stop" => {
+          count += 1usize;
+          // Directly append response
+          self.msg.push(choice.message);
+        }
+        "tool_calls" => {}
+        e => {
+          warn!("While parsing LLAMA Chat, found \"{e}\" as exit reason");
+        }
       }
     }
 
@@ -63,6 +71,6 @@ impl LlamaChatHandler {
       return Ok(&EMPTY);
     }
 
-    Ok(self.msg.get(indexone..(indexone+count)).unwrap_or(&EMPTY))
+    Ok(self.msg.get(indexone..(indexone + count)).unwrap_or(&EMPTY))
   }
 }

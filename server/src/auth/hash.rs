@@ -1,11 +1,15 @@
 use crossbeam_channel::{Sender, bounded};
 use ed25519_dalek::{Signature, SigningKey, ed25519::signature::SignerMut};
+use log::info;
 use rand::rngs::OsRng;
 use std::thread;
 use std::thread::available_parallelism;
 use tokio::sync::oneshot::{Sender as OneshotSender, channel};
 
-use crate::auth::{INTEGRITY_KEY, argon};
+use crate::{
+  auth::{INTEGRITY_KEY, argon},
+  server::CONFIG,
+};
 
 pub struct HashingAgent(Sender<HashResp>);
 
@@ -27,13 +31,23 @@ pub enum HashResp {
 
 impl HashingAgent {
   pub fn new() -> Self {
-    // `Total threads - 1` so that at least 1 thread is kept idle
-    let threads = available_parallelism()
+    let total_threads = available_parallelism()
       .expect("Unable to get parallelism")
-      .get()
-      - 1;
+      .get() as f64;
 
-    let (tx, rx) = bounded::<HashResp>(2 * threads);
+    let threads = ((total_threads * CONFIG.performance.scale_factor).round() as usize).max(1);
+
+    info!(
+      "Allocating {threads} out of {total_threads} for CPU-Bound Task (scale_factor: {})",
+      CONFIG.performance.scale_factor
+    );
+
+    let queue_size = CONFIG.performance.queue_size * threads;
+
+    let (tx, rx) = bounded::<HashResp>(queue_size);
+
+    info!("Queue has a maximum size of {queue_size}");
+    info!("Queue Size Factor is : {}", CONFIG.performance.queue_size);
 
     for _ in 0..threads {
       let rxc = rx.clone();

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "binds": [
     [
       "0.0.0.0",
@@ -10,12 +10,12 @@
       3000
     ]
   ],
-  "admin_pass_hash": "$argon2id$v=19$m=32768,t=2,p=1$OG0Rq9RH17YzH68z4OQ4qQVzXDp04YtV4bZddJurR7c$egASkkoXrChmCVg30M738NK0zcusMXYYyBFTDBNtUoE",
+  "admin_pass_hash": "$argon2id$v=19$m=32768,t=2,p=1$YyBu0WbV69Bo3IcvRoJlBI9wDVYLw2h7lNB0CfSDXW4$ZrSnj/MweiC0qePSxteBDAo9i8cLowMBFpLLQAUE5wc",
   "llama": {
     "models": {
-      "g4skQ9eX3mxoiECl6yORTP/HVaBALWDM": {
+      "J7sIMc9Anzfu/36S0Wr+dEoXDa4VxB1j": {
         "name": "AHQ AI 1.0",
-        "url": "http://127.0.0.1:8080",
+        "url": "http://localhost:8080",
         "capabilities": 4,
         "apikey": null
       }
@@ -24,16 +24,22 @@
   "authentication": {
     "kind": "Account",
     "registration_allowed": true,
-    "max_memory": 128,
-    "time_cost": 5
+    "max_memory": 32,
+    "time_cost": 1,
+    "session_expiry_days": 15,
+    "hash_bytes": 64
   },
   "database": {
     "authdb": {
       "db": "mongodb",
-      "url": "0dq8PIOVJ5ZocpeInQupwsvYsWGbIuK9a+8WHXlgOtc1xDwWlb11l91NrXqIT20C+8YT1AVWGVP3RI2cI3/wO635yYR88if592NPweh/4l1e1BD6aj4pi5Te9qW+lc6qOnCeLPjzMfMg+/+xQBQw5vZMN2vM82kNG9rIW3GPealBkEFwfknHXIyPjFwV2/E="
+      "url": "UxaTrMLzESIW15MYmAKT0J7UiRSRr7HSBixLxGeeL09jFkTnfJUitWW8x0ZE9ORXxzyNyx8jLPXgbKDPXFGXO9O4vL1d2Hf2hFgpCnz29t/WcuEufkIRciOsHZMkQ32BJZ0l7LtY5nkiAWRAHTT8IjuPbsIHutcqXKGi8nPkcl3JeM49cRK8TEDw7+ClG4U="
     },
     "cache": {
       "db": "moka"
     }
+  },
+  "performance": {
+    "scale_factor": 0.75,
+    "queue_size": 3
   }
 }

@@ -27,6 +27,8 @@ impl<V: View, F: Fn(&mut Cursive) + 'static> OnAuthStateUpdate<V, F> {
             registration_allowed: false,
             max_memory: 64,
             time_cost: 5,
+            session_expiry_days: 30,
+            hash_bytes: 32,
           },
         }
       })),

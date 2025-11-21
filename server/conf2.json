@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "binds": [
+    [
+      "0.0.0.0",
+      3000
+    ],
+    [
+      "localhost",
+      3000
+    ]
+  ],
+  "admin_pass_hash": "$argon2id$v=19$m=32768,t=2,p=1$OG0Rq9RH17YzH68z4OQ4qQVzXDp04YtV4bZddJurR7c$egASkkoXrChmCVg30M738NK0zcusMXYYyBFTDBNtUoE",
+  "llama": {
+    "models": {
+      "g4skQ9eX3mxoiECl6yORTP/HVaBALWDM": {
+        "name": "AHQ AI 1.0",
+        "url": "http://127.0.0.1:8080",
+        "capabilities": 4,
+        "apikey": null
+      }
+    }
+  },
+  "authentication": {
+    "kind": "Account",
+    "registration_allowed": true,
+    "max_memory": 128,
+    "time_cost": 5
+  },
+  "database": {
+    "authdb": {
+      "db": "mongodb",
+      "url": "0dq8PIOVJ5ZocpeInQupwsvYsWGbIuK9a+8WHXlgOtc1xDwWlb11l91NrXqIT20C+8YT1AVWGVP3RI2cI3/wO635yYR88if592NPweh/4l1e1BD6aj4pi5Te9qW+lc6qOnCeLPjzMfMg+/+xQBQw5vZMN2vM82kNG9rIW3GPealBkEFwfknHXIyPjFwV2/E="
+    },
+    "cache": {
+      "db": "moka"
+    }
+  }
+}

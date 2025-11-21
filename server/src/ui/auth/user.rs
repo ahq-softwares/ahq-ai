@@ -10,7 +10,14 @@ use crate::{
   ui::Ptr,
 };
 
-pub fn render(l: &mut LinearLayout, can_register: bool, memory: u32, time: u32) {
+pub fn render(
+  l: &mut LinearLayout,
+  can_register: bool,
+  memory: u32,
+  time: u32,
+  expr: u64,
+  hash_bytes: usize,
+) {
   l.add_child(
     LinearLayout::horizontal()
       .child(TextView::new("⚒ Authentication Type").full_width())
@@ -132,9 +139,86 @@ pub fn render(l: &mut LinearLayout, can_register: bool, memory: u32, time: u32) 
       ),
   );
 
+  l.add_child(
+    LinearLayout::horizontal()
+      .child(TextView::new("⚒ Argon2 Hash Bytes (1Byte = 8Bits)").full_width())
+      .child(
+        Button::new_raw(format!("<{hash_bytes}>"), |x| {
+          x.add_layer(
+            Dialog::around(
+              EditView::new()
+                .on_edit(|x, val, _| {
+                  let state: &mut Ptr<Config> = x.user_data().unwrap();
+
+                  if let Ok(num) = val.parse::<usize>()
+                    && num > 0
+                  {
+                    let Authentication::Account { hash_bytes, .. } = &mut state.authentication
+                    else {
+                      unreachable!()
+                    };
+                    *hash_bytes = num;
+
+                    x.call_on_name("hash_bytes", move |x: &mut Button| {
+                      x.set_label_raw(format!("<{num}>"));
+                    });
+                  }
+                })
+                .on_submit(|x, _| {
+                  x.pop_layer();
+                }),
+            )
+            .dismiss_button("Done")
+            .title("Set total hash bytes"),
+          );
+        })
+        .with_name("hash_bytes"),
+      ),
+  );
+
   l.add_child(DummyView::new().fixed_height(2));
 
   l.add_child(TextView::new("Miscellaneous").style(Style::merge(&[Effect::Underline.into()])));
+
+  l.add_child(
+    LinearLayout::horizontal()
+      .child(TextView::new("⚒ Session Token Expiry (in days)").full_width())
+      .child(
+        Button::new_raw(format!("<{expr}>"), |x| {
+          x.add_layer(
+            Dialog::around(
+              EditView::new()
+                .on_edit(|x, val, _| {
+                  let state: &mut Ptr<Config> = x.user_data().unwrap();
+
+                  if let Ok(num) = val.parse::<u64>()
+                    && num > 0
+                  {
+                    let Authentication::Account {
+                      session_expiry_days,
+                      ..
+                    } = &mut state.authentication
+                    else {
+                      unreachable!()
+                    };
+                    *session_expiry_days = num;
+
+                    x.call_on_name("expr", move |x: &mut Button| {
+                      x.set_label_raw(format!("<{num}>"));
+                    });
+                  }
+                })
+                .on_submit(|x, _| {
+                  x.pop_layer();
+                }),
+            )
+            .dismiss_button("Done")
+            .title("Expiry (in days)"),
+          );
+        })
+        .with_name("expr"),
+      ),
+  );
 
   l.add_child(
     LinearLayout::horizontal()

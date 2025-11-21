@@ -12,7 +12,7 @@ pub type ApiMap = HashMap<Box<str>, ApiData>;
 pub struct ApiData {
   pub client: Client,
   pub completions: Box<str>,
-  pub _props_url: Box<str>
+  pub _props_url: Box<str>,
 }
 
 pub fn genapimap() -> ApiMap {

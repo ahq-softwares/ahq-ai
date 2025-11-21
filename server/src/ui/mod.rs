@@ -39,6 +39,8 @@ pub static ASYNC: LazyLock<Runtime> = LazyLock::new(|| {
     .expect("Unable to build async runtime")
 });
 
+mod performance;
+
 fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
   l.add_child(
     TextView::new("Welcome to AHQ-AI Server Configuration")
@@ -175,6 +177,8 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
                         registration_allowed: true,
                         max_memory: 64,
                         time_cost: 5,
+                        session_expiry_days: 30,
+                        hash_bytes: 32,
                       },
                       _ => unreachable!(),
                     };
@@ -203,6 +207,16 @@ fn general(l: &mut LinearLayout, c_: Ptr<Config>) {
         .with_name("auth_type"),
       ),
   );
+
+  l.add_child(DummyView::new().fixed_height(1).full_width());
+
+  l.add_child(TextView::new("Performance").style(Style::merge(&[Effect::Underline.into()])));
+
+  performance::perf(l, c_.clone());
+
+  l.add_child(DummyView::new().fixed_height(1).full_width());
+
+  l.add_child(TextView::new("Miscellaneous").style(Style::merge(&[Effect::Underline.into()])));
 
   l.add_child(
     LinearLayout::horizontal()

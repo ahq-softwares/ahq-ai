@@ -43,13 +43,14 @@ static HASHARGON: LazyLock<Argon2> = LazyLock::new(|| {
   let Authentication::Account {
     max_memory,
     time_cost,
+    hash_bytes,
     ..
   } = CONFIG.authentication.clone()
   else {
     unreachable!()
   };
 
-  let params = Params::new(max_memory * 1024, time_cost, 1, None)
+  let params = Params::new(max_memory * 1024, time_cost, 1, Some(hash_bytes))
     .expect("Invalid argon2 configuration found. Exiting server");
 
   Argon2::new(Algorithm::Argon2id, Version::V0x13, params)

@@ -3,7 +3,11 @@ use std::time::Duration;
 use async_trait::async_trait;
 use moka::future::Cache;
 
-use crate::{auth::cache::AsyncCaching, structs::error::Returns};
+use crate::{
+  auth::cache::AsyncCaching,
+  server::CONFIG,
+  structs::{Authentication, error::Returns},
+};
 
 pub struct MokaSessions {
   cache: Cache<String, String>,
@@ -17,9 +21,17 @@ impl Default for MokaSessions {
 
 impl MokaSessions {
   pub fn new() -> Self {
+    let Authentication::Account {
+      session_expiry_days,
+      ..
+    } = CONFIG.authentication
+    else {
+      unreachable!()
+    };
+
     Self {
       cache: Cache::builder()
-        .time_to_live(Duration::from_days(30))
+        .time_to_live(Duration::from_days(session_expiry_days))
         .build(),
     }
   }

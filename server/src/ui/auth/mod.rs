@@ -42,7 +42,16 @@ pub fn auth_page(
             registration_allowed,
             max_memory,
             time_cost,
-          } => user::render(layout, registration_allowed, max_memory, time_cost),
+            session_expiry_days,
+            hash_bytes,
+          } => user::render(
+            layout,
+            registration_allowed,
+            max_memory,
+            time_cost,
+            session_expiry_days,
+            hash_bytes,
+          ),
         }
       });
     },

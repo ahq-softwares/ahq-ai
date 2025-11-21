@@ -10,7 +10,7 @@ use crate::structs::{db::DatabaseConfig, error::Returns};
 pub mod db;
 pub mod error;
 
-const VERSION: u16 = 1;
+const VERSION: u16 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct Config {
@@ -21,6 +21,13 @@ pub struct Config {
   pub llama: LlamaConfiguration,
   pub authentication: Authentication,
   pub database: DatabaseConfig,
+  pub performance: PerformanceConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+pub struct PerformanceConfig {
+  pub scale_factor: f64,
+  pub queue_size: usize,
 }
 
 fn def_bind() -> Vec<(String, u16)> {
@@ -59,7 +66,7 @@ pub struct LlamaServer {
 pub enum ModelFlag {
   Image,
   Audio,
-  Tools
+  Tools,
 }
 
 impl ModelFlag {
@@ -67,7 +74,7 @@ impl ModelFlag {
     match self {
       Self::Image => 1,
       Self::Audio => 2,
-      Self::Tools => 4
+      Self::Tools => 4,
     }
   }
 }
@@ -116,6 +123,8 @@ pub enum Authentication {
     registration_allowed: bool,
     max_memory: u32,
     time_cost: u32,
+    session_expiry_days: u64,
+    hash_bytes: usize,
   },
 }
 
@@ -160,6 +169,12 @@ impl Default for Config {
         registration_allowed: true,
         max_memory: 64,
         time_cost: 5,
+        session_expiry_days: 30,
+        hash_bytes: 32,
+      },
+      performance: PerformanceConfig {
+        scale_factor: 0.75,
+        queue_size: 3,
       },
     }
   }
