@@ -75,6 +75,6 @@ fn main() {
     ui::ui();
   } else {
     log::setup();
-    server::main().unwrap();
+    server::main().expect("Server failed to start. This is a before-any-checks-done error which means that the server couldn't even connect to the sockets.");
   }
 }

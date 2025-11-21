@@ -55,17 +55,12 @@ async fn verify_auth(passwd: &str) -> Result<(), HttpResponse> {
     .get()
     .map(|x| async move { passwd == x.read().await.expose_secret() });
 
-  let val;
+  let val = if let Some(v) = value { v.await } else { false };
 
-  if let Some(v) = value {
-    val = v.await;
+  if val {
+    Ok(())
   } else {
-    val = false;
-  }
-
-  match val {
-    true => Ok(()),
-    _ => Err(HttpResponse::Unauthorized().body(r#"{ "msg": "Unauthorized" }"#)),
+    Err(HttpResponse::Unauthorized().body(r#"{ "msg": "Unauthorized" }"#))
   }
 }
 
@@ -145,7 +140,9 @@ async fn create(body: Bytes) -> Result<impl Responder> {
       AccountCreateOutcome::WeakPassword => {
         Ok(HttpResponse::BadRequest().body(r#"{ "msg": "Insecure Password" }"#))
       }
-      _ => Ok(HttpResponse::UnprocessableEntity().body(r#"{ "msg": "Unreachable Output" }"#)),
+      AccountCreateOutcome::SuccessfulOut(_) => {
+        Ok(HttpResponse::UnprocessableEntity().body(r#"{ "msg": "Unreachable Output" }"#))
+      }
     };
   }
 
@@ -181,7 +178,9 @@ async fn create_token(body: Bytes) -> Result<impl Responder> {
       AccountCreateOutcome::WeakPassword => {
         Ok(HttpResponse::BadRequest().body(r#"{ "msg": "Insecure Password" }"#))
       }
-      _ => Ok(HttpResponse::UnprocessableEntity().body(r#"{ "msg": "Unreachable Output" }"#)),
+      AccountCreateOutcome::Successful => {
+        Ok(HttpResponse::UnprocessableEntity().body(r#"{ "msg": "Unreachable Output" }"#))
+      }
     };
   }
 

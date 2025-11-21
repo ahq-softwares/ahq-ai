@@ -69,7 +69,7 @@ pub fn render_table(layout: &mut LinearLayout, conf: Ptr<Config>) {
                   .child(TextView::new("`Abbr` : Capability"))
                   .child(TextView::new("`A`    : Audio"))
                   .child(TextView::new("`I`    : Image"))
-                  .child(TextView::new("`F`    : Files")),
+                  .child(TextView::new("`T`    : Tool Calling")),
               ))
               .title("Legend")
               .dismiss_button("Got it"),
@@ -104,8 +104,8 @@ pub fn render_table(layout: &mut LinearLayout, conf: Ptr<Config>) {
       cap.push("I");
     }
 
-    if v.capabilities.has(ModelFlag::Files) {
-      cap.push("F");
+    if v.capabilities.has(ModelFlag::Tools) {
+      cap.push("I");
     }
 
     let cap = cap.join("");
@@ -254,15 +254,15 @@ pub fn new_server(conf: Ptr<Config>, key: Option<String>) -> ResizedView<Resized
         );
         x.add_child(
           LinearLayout::horizontal()
-            .child(TextView::new("Files Support").full_width())
+            .child(TextView::new("Tools Support").full_width())
             .child(
               Checkbox::new()
                 .with(move |x| {
                   if let Some(data) = l6 {
-                    x.set_checked(data.capabilities.has(ModelFlag::Files));
+                    x.set_checked(data.capabilities.has(ModelFlag::Tools));
                   }
                 })
-                .with_name("file"),
+                .with_name("tool"),
             ),
         );
       }))
@@ -316,8 +316,8 @@ pub fn new_server(conf: Ptr<Config>, key: Option<String>) -> ResizedView<Resized
         .call_on_name("aud", |x: &mut Checkbox| x.is_checked())
         .unwrap();
 
-      let file = x
-        .call_on_name("file", |x: &mut Checkbox| x.is_checked())
+      let tools = x
+        .call_on_name("tool", |x: &mut Checkbox| x.is_checked())
         .unwrap();
 
       conf.clone().llama.models.insert(
@@ -338,8 +338,8 @@ pub fn new_server(conf: Ptr<Config>, key: Option<String>) -> ResizedView<Resized
             if audio {
               capab.add(ModelFlag::Audio);
             }
-            if file {
-              capab.add(ModelFlag::Files);
+            if tools {
+              capab.add(ModelFlag::Tools);
             }
 
             capab

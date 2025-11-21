@@ -16,12 +16,13 @@ async fn index() -> impl Responder {
     .body::<&[u8]>(ROOT_RESPONSE_DATA.as_ref())
 }
 
-#[get("/me")]
+#[post("/me")]
 async fn me(payload: Bytes) -> Result<impl Responder> {
   let session = str::from_utf8(&payload);
 
   match session {
     Ok(session) => {
+      #[allow(clippy::expect_used)]
       let auth_ref = AUTH
         .get()
         .expect("Auth must be defined or else this function cant be registered");
@@ -38,8 +39,8 @@ async fn me(payload: Bytes) -> Result<impl Responder> {
 
 #[post("/challenge")]
 async fn challenge(payload: Bytes) -> Result<impl Responder> {
-  match AGENT.gen_signature(&payload).await {
-    Some(x) => Ok(HttpResponse::Ok().body(x.to_vec())),
-    _ => Ok(HttpResponse::InternalServerError().body::<&[u8]>(br#"{ "msg": "Unable to hash" }"#)),
-  }
+  (AGENT.gen_signature(&payload).await).map_or_else(
+    || Ok(HttpResponse::InternalServerError().body::<&[u8]>(br#"{ "msg": "Unable to hash" }"#)),
+    |x| Ok(HttpResponse::Ok().body(x.to_vec())),
+  )
 }

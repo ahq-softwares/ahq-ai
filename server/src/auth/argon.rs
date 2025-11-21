@@ -33,7 +33,8 @@ static KEYARGON: LazyLock<Argon2> = LazyLock::new(|| {
   #[cfg(not(debug_assertions))]
   let memory = 128;
 
-  let params = Params::new(memory * 1024, iterations, 1, Some(KEY_LEN)).unwrap();
+  let params = Params::new(memory * 1024, iterations, 1, Some(KEY_LEN))
+    .expect("Invalid argon2 configuration found. Exiting server");
 
   Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
 });
@@ -48,7 +49,8 @@ static HASHARGON: LazyLock<Argon2> = LazyLock::new(|| {
     unreachable!()
   };
 
-  let params = Params::new(max_memory * 1024, time_cost, 1, None).unwrap();
+  let params = Params::new(max_memory * 1024, time_cost, 1, None)
+    .expect("Invalid argon2 configuration found. Exiting server");
 
   Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
 });
@@ -119,11 +121,18 @@ pub mod server {
 
 const NONCE_LEN: usize = 12;
 
+/// ## PANICKING
+/// This is a panicking functions
+///
+/// This function panicks like crazy because it is not used in
+/// the server side code
 pub fn encrypt_with_key(pwd: &str, data: &str) -> String {
   let salt = {
     let mut salt_bytes = [0u8; SALT_LEN];
 
-    OsRng.try_fill_bytes(&mut salt_bytes).unwrap();
+    OsRng
+      .try_fill_bytes(&mut salt_bytes)
+      .expect("OS Error, the os does not have the capability to generate random data");
 
     salt_bytes
   };
@@ -164,6 +173,12 @@ pub fn encrypt_with_key(pwd: &str, data: &str) -> String {
 /// # WARNING
 /// This functions returns an empty string if the data provided
 /// is empty. Please be informed
+///
+/// ## PANICKING
+/// This is a panicking functions
+///
+/// This function panicks like crazy because it is not used in
+/// the server side code
 pub fn decrypt_with_key(pwd: &str, data: &str) -> String {
   // WARNING
   // A very powerful failsafe
@@ -199,17 +214,27 @@ pub fn decrypt_with_key(pwd: &str, data: &str) -> String {
   String::from_utf8(ciphertext_with_tag).unwrap()
 }
 
+/// ## PANICKING
+/// This is a panicking functions
+///
+/// This function panicks like crazy because it is not used in
+/// the server side code
 pub fn migrate_key(old_pass: &str, new_pass: &str, encrypted: &str) -> String {
   let data = decrypt_with_key(old_pass, encrypted);
 
   encrypt_with_key(new_pass, &data)
 }
 
-// Since all the important / potentially dangerous is leaked credentials
-// are encrypted in config itself
-//
-// We must decrypt and re-encrypt with my new password when the admin password
-// changes
+/// Since all the important / potentially dangerous can be leaked, credentials
+/// are encrypted in config itself
+///
+/// We must decrypt and re-encrypt with my new password when the admin password
+/// changes
+/// ## PANICKING
+/// This is a panicking functions
+///
+/// This function panicks like crazy because it is not used in
+/// the server side code
 pub fn migrate_config(old_pass: &str, new_pass: &str, config: &mut Config) {
   {
     config.llama.models.iter_mut().for_each(|(_, v)| {
@@ -253,6 +278,11 @@ pub fn migrate_config(old_pass: &str, new_pass: &str, config: &mut Config) {
   }
 }
 
+/// ## PANICKING
+/// This is a panicking functions
+///
+/// This function panicks like crazy because it is not used in
+/// the server side code
 pub fn decrypt_config(pass: &str, config: &mut Config) {
   {
     config.llama.models.iter_mut().for_each(|(_, v)| {

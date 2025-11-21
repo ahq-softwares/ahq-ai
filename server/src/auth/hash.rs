@@ -38,7 +38,8 @@ impl HashingAgent {
     for _ in 0..threads {
       let rxc = rx.clone();
       thread::spawn(move || {
-        let mut signer = SigningKey::from_keypair_bytes(INTEGRITY_KEY).unwrap();
+        let mut signer = SigningKey::from_keypair_bytes(INTEGRITY_KEY)
+          .expect("Invalid integrity key, this error should not come after server has started");
 
         let mut rng = OsRng;
 

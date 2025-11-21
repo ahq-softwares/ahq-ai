@@ -1,3 +1,21 @@
+#![warn(clippy::pedantic)] // Set pedantic to warn initially
+#![warn(clippy::nursery)]
+// Set nursery to warn initially
+
+// --- DENY MAJOR CLIPPY GROUPS (Turns all warnings from these groups into errors) ---
+#![deny(clippy::all)]
+#![deny(clippy::pedantic)]
+#![deny(clippy::nursery)]
+// --- TARGETED DENIALS (Critical for Production Stability) ---
+// These specific lints are crucial for high-reliability code,
+// often residing in the 'restriction' group which is too verbose to enable fully.
+#![deny(clippy::unwrap_used)] // Prevents runtime panics from unwrap()
+#![deny(clippy::expect_used)] // Prevents runtime panics from expect()
+#![deny(clippy::todo)] // Prevents shipping incomplete code
+#![deny(clippy::unimplemented)] // Prevents shipping incomplete code
+#![deny(clippy::integer_division)] // Catches potential issues with integer division casting
+#![allow(clippy::future_not_send)]
+
 use crate::{
   auth::{
     AuthSessionManager,
@@ -8,7 +26,7 @@ use crate::{
 };
 use actix_web::{App, HttpServer, web};
 use chalk_rs::Chalk;
-use log::*;
+use log::{error, info, warn};
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::from_str;
 use std::{
@@ -32,8 +50,10 @@ pub mod apiset;
 
 // This is the encrypted config
 pub static CONFIG: LazyLock<Config> = LazyLock::new(|| {
+  #[allow(clippy::expect_used)]
   let data = stdfs::read_to_string("config.json").expect("Unable to load config");
 
+  #[allow(clippy::expect_used)]
   from_str(&data).expect("Invalid configuration file, unable to parse")
 });
 
@@ -50,6 +70,7 @@ fn decrypt_config() -> RwLock<Config> {
   if let Some(pass) = REAL_ADMIN_PASSWORD.get() {
     let mut conf = CONFIG.clone();
 
+    #[allow(clippy::expect_used)]
     let conf = thread::spawn(move || {
       argon::decrypt_config(pass.blocking_read().expose_secret(), &mut conf);
 
@@ -123,13 +144,12 @@ pub async fn main() -> std::io::Result<()> {
     let mut app = App::new()
       .service(http::index)
       .route("/chat", web::get().to(chat::chat))
-      .service(http::challenge)
-      .service(http::me);
+      .service(http::challenge);
 
     let auth = !matches!(CONFIG.authentication, Authentication::OpenToAll);
 
     if auth {
-      app = app.service(auth::auth);
+      app = app.service(auth::auth).service(http::me);
     }
 
     if admin_api {
@@ -151,7 +171,7 @@ pub async fn main() -> std::io::Result<()> {
 
   for (host, port) in &CONFIG.binds {
     info!("Binding to {host}:{port}");
-    server = server.bind((host as &str, *port))?
+    server = server.bind((host as &str, *port))?;
   }
 
   info!("Server is starting");
@@ -186,6 +206,7 @@ pub async fn main() -> std::io::Result<()> {
 
 // Rquests admin password if needed and outputs if
 // you can enable admin urls
+#[allow(clippy::useless_let_if_seq, clippy::expect_used)]
 fn request_admin_passwd() -> bool {
   if let Some(x) = &CONFIG.admin_pass_hash {
     let hash = x as &str;
@@ -206,9 +227,10 @@ fn request_admin_passwd() -> bool {
         .expect("Unable to read your password");
     }
 
-    if !verify_server_pass(&passwd, hash).unwrap_or(false) {
-      panic!("Invalid Password was provided")
-    }
+    assert!(
+      verify_server_pass(&passwd, hash).unwrap_or(false),
+      "Invalid Password was provided"
+    );
 
     info!("");
     info!("----------------");

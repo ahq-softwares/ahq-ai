@@ -77,7 +77,13 @@ impl AuthServer for MongodbClient {
             let out = x.is_ok();
             async move { out }
           })
-          .map(|x| x.unwrap().id.into_bytes())
+          // SAFETY
+          // Guaranteed to be non null
+          .map(|x| {
+            x.expect("The documents that have data are coming over here, nothing else")
+              .id
+              .into_bytes()
+          })
           .collect::<Vec<_>>()
           .await,
       )

@@ -59,7 +59,7 @@ pub struct LlamaServer {
 pub enum ModelFlag {
   Image,
   Audio,
-  Files,
+  Tools
 }
 
 impl ModelFlag {
@@ -67,7 +67,7 @@ impl ModelFlag {
     match self {
       Self::Image => 1,
       Self::Audio => 2,
-      Self::Files => 4,
+      Self::Tools => 4
     }
   }
 }

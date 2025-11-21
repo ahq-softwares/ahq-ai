@@ -178,7 +178,7 @@ impl AuthSessionManager {
 pub fn now() -> u64 {
   SystemTime::now()
     .duration_since(UNIX_EPOCH)
-    .unwrap()
+    .expect("Time is flowing in reverse")
     .as_secs()
 }
 
@@ -230,6 +230,7 @@ pub fn gen_uid() -> Returns<String> {
   Ok(token)
 }
 
+#[allow(clippy::future_not_send)]
 pub async fn gen_auth_token(cpufarm: &HashingAgent) -> Returns<(String, (String, Hashed))> {
   let mut rng = rand::rng();
 

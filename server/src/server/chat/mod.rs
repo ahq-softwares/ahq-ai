@@ -1,8 +1,12 @@
 use crate::{
   server::{
-    AUTH, CONFIG, llama::{LlamaChatHandler, structs::LlamaRequest}
+    AUTH, CONFIG,
+    llama::{
+      LlamaChatHandler,
+      structs::{LlamaRequest, Message, MsgStruct},
+    },
   },
-  structs::Capabilities,
+  structs::{Capabilities, ModelFlag},
 };
 use log::error;
 
@@ -16,6 +20,7 @@ use actix_web::{
   web::Payload,
 };
 use actix_ws::{AggregatedMessage, Session};
+use serde_json::to_string;
 
 const MISSING_HEADERS_BODY: &str = r#"{ "msg": "Headers `Authorization`, `model` are necessary" }"#;
 const INVALID_SESSION_BODY: &str = r#"{ "msg": "Invalid SessionToken" }"#;
@@ -31,6 +36,7 @@ fn json_response(status: StatusCode, body: &'static str) -> HttpResponse {
     .body(body)
 }
 
+#[allow(clippy::future_not_send)]
 pub async fn chat(req: HttpRequest, stream: Payload) -> Result<HttpResponse> {
   let headers = req.headers();
 
@@ -66,7 +72,7 @@ pub async fn chat(req: HttpRequest, stream: Payload) -> Result<HttpResponse> {
   let mut chat;
 
   if let Some(x) = CONFIG.llama.models.get(model) {
-    chat = LlamaChatHandler::new(model)?;
+    chat = LlamaChatHandler::new(model);
 
     // Very cheap to clone
     cap = x.capabilities.clone();
@@ -102,15 +108,14 @@ pub async fn chat(req: HttpRequest, stream: Payload) -> Result<HttpResponse> {
           }
         }
         Ok(AggregatedMessage::Close(_)) => break,
-        Ok(AggregatedMessage::Ping(_)) => continue, // Ping/Pong don't need a break
-        Ok(AggregatedMessage::Pong(_)) => continue, // Use 'continue' to keep the loop going
+        Ok(AggregatedMessage::Ping(_) | AggregatedMessage::Pong(_)) => {} // Ping/Pong don't need a break
         Ok(_) => {
           _ = session.text(INVALID_WS_RESP).await;
           break;
         } // Catch any unexpected AggregatedMessage (e.g., Binary) and close cleanly
         Err(e) => {
           // Log the stream error here! Use a proper logging crate (e.g., tracing)
-          error!("WebSocket stream error: {:?}", e);
+          error!("WebSocket stream error: {e:?}");
           break;
         }
       }
@@ -145,7 +150,20 @@ async fn handle_msg_faillable(
   session: &mut Session,
 ) -> Option<()> {
   match msg {
-    LlamaRequest::Init { history: hist } => {
+    LlamaRequest::Feed { history: hist } => {
+      if *init {
+        _ = session.text(r#"{ "msg": "Already initialized" }"#).await;
+
+        return None;
+      }
+
+      hwnd.msg.extend(hist.into_iter());
+
+      _ = session.text(r#"{ "done": true }"#).await;
+
+      Some(())
+    }
+    LlamaRequest::Init {} => {
       if *init {
         _ = session.text(r#"{ "msg": "Already initialized" }"#).await;
 
@@ -153,14 +171,12 @@ async fn handle_msg_faillable(
       }
 
       *init = true;
-      hwnd.msg.extend(hist.into_iter());
+
+      _ = session.text(r#"{ "done": true }"#).await;
 
       Some(())
     }
-    LlamaRequest::ChatCompletion {
-      prompt,
-      attachments,
-    } => {
+    LlamaRequest::ChatCompletion { msg } => {
       if !*init {
         _ = session
           .text(r#"{ "msg": "Initialization Required" }"#)
@@ -168,37 +184,39 @@ async fn handle_msg_faillable(
         return None;
       }
 
+      if msg.iter().any(|x| match x {
+        MsgStruct::Image { .. } => !cap.has(ModelFlag::Image),
+        MsgStruct::Audio { .. } => !cap.has(ModelFlag::Audio),
+        MsgStruct::TextOrFile { .. } => false,
+      }) {
+        _ = session
+          .text(r#"{ "msg": "The model was requested to process data that is not under its capabilities" }"#)
+          .await;
+
+        return None;
+      }
+
+      hwnd.msg.push(Message::User { content: msg });
+
+      let Ok(new_msgs) = hwnd.complete().await else {
+        _ = session.text(r#"{ "msg": "Context length has been reached. This chat has to be reset", "action:createNewChat": true }"#).await;
+        return None;
+      };
+
+      let Ok(data) = to_string(new_msgs) else {
+        _ = session
+          .text(r#"{ "msg": "Unable to serialize response" }"#)
+          .await;
+        return None;
+      };
+
+      _ = session.text(data).await;
+
+      // TODO: Handling Tools + Allowing Tool Calls
+
+      _ = session.text(r#"{ "done": true }"#).await;
+
       Some(())
-
-      // let mut message = ChatMessage::user(prompt);
-
-      // if let Some(images) = images {
-      //   if !img_capable {
-      //     _ = session
-      //         .text(r#"{ "msg": "The model is not image capable" }"#)
-      //         .await;
-      //     return None;
-      //   }
-
-      //   message = message.with_images(
-      //     images
-      //       .into_iter()
-      //       .map(Image::from_base64)
-      //       .collect::<Vec<_>>(),
-      //   );
-      // }
-
-      // let resp = OLLAMA
-      //   .send_chat_messages_with_history(history, ChatMessageRequest::new(model, vec![message]))
-      //   .await
-      //   .ok()?;
-
-      // let out = OllamaMsgResp {
-      //   content: resp.message.content,
-      //   thinking: resp.message.thinking,
-      // };
-
-      // _ = session.text(serde_json::to_string(&out).ok()?).await;
     }
   }
 }

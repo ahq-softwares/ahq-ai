@@ -271,7 +271,6 @@ dependencies = [
  "aes-gcm",
  "ahqrt",
  "argon2",
- "async-recursion 1.1.1",
  "async-stream",
  "async-trait",
  "base64 0.22.1",
@@ -373,17 +372,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
-]
-
-[[package]]
-name = "async-recursion"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b43422f69d8ff38f95f1b2bb76517c91589a924d1559a0e935d7c8ce0274c11"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.110",
 ]
 
 [[package]]
@@ -3721,7 +3709,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "048968e4e3d04db472346770cc19914c6b5ae206fa44677f6a0874d54cd05940"
 dependencies = [
- "async-recursion 0.3.2",
+ "async-recursion",
  "async-trait",
  "derive-new",
  "either",

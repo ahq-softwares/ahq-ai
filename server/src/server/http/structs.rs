@@ -29,7 +29,7 @@ pub struct RootResponse<'a> {
   models: Vec<Model<'a>>,
 }
 
-impl<'a> RootResponse<'a> {
+impl RootResponse<'_> {
   pub fn compile() -> Vec<u8> {
     let mut out = Self {
       version: env!("CARGO_PKG_VERSION"),
@@ -59,6 +59,7 @@ impl<'a> RootResponse<'a> {
       });
     });
 
+    #[allow(clippy::expect_used)]
     serde_json::to_vec(&out).expect("Failed to serialize static RootResponse")
   }
 }

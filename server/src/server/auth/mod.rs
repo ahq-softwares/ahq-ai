@@ -30,6 +30,7 @@ pub async fn auth(payload: Bytes) -> Result<impl Responder> {
     return Ok(HttpResponse::BadRequest().body(r#"{ "msg": "Invalid Data" }"#));
   };
 
+  #[allow(clippy::expect_used)]
   let auth_ref = AUTH
     .get()
     .expect("Auth must be defined or else this function cant be registered");
@@ -56,6 +57,7 @@ pub async fn register(payload: Bytes) -> Result<impl Responder> {
     return Ok(HttpResponse::BadRequest().body(r#"{ "msg": "Invalid Data" }"#));
   };
 
+  #[allow(clippy::expect_used)]
   let auth_ref = AUTH
     .get()
     .expect("Auth must be defined or else this function cant be registered");
@@ -78,6 +80,8 @@ pub async fn register(payload: Bytes) -> Result<impl Responder> {
     AccountCreateOutcome::WeakPassword => {
       Ok(HttpResponse::BadRequest().body(r#"{ "msg": "Insecure Password" }"#))
     }
-    _ => Ok(HttpResponse::UnprocessableEntity().body(r#"{ "msg": "Unreachable Output" }"#)),
+    AccountCreateOutcome::SuccessfulOut(_) => {
+      Ok(HttpResponse::UnprocessableEntity().body(r#"{ "msg": "Unreachable Output" }"#))
+    }
   }
 }

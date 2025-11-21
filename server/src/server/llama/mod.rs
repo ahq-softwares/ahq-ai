@@ -1,10 +1,10 @@
 use crate::{
-  server::{API_MAP, apiset::ApiData, llama::structs::{HTTPAIResponse, HTTPCompletion, Message}},
+  server::{
+    API_MAP,
+    apiset::ApiData,
+    llama::structs::{HTTPAIResponse, HTTPCompletion, Message},
+  },
   structs::error::Returns,
-};
-use reqwest::{
-  Client, ClientBuilder,
-  header::{HeaderMap, HeaderValue},
 };
 
 pub mod structs;
@@ -17,22 +17,30 @@ pub struct LlamaChatHandler {
 }
 
 impl LlamaChatHandler {
-  pub fn new(model: &str) -> Returns<Self> {
-    Ok(Self {
+  pub fn new(model: &str) -> Self {
+    Self {
+      #[allow(clippy::expect_used)]
       urls: API_MAP
         .get(model)
         .expect("Impossible, this means that checks were not correctly made"),
       msg: vec![],
-    })
+    }
+  }
+
+  pub async fn complete(&mut self) -> Returns<&[Message]> {
+    self.complete_inner().await
   }
 
   /// Does the AI Completion and returns the new messages
-  pub async fn complete<'a>(&'a mut self) -> Returns<&'a [Message]> {
-    let response = self.urls.client.post(&self.urls.completions as &str)
+  pub async fn complete_inner(&mut self) -> Returns<&[Message]> {
+    let response = self
+      .urls
+      .client
+      .post(&self.urls.completions as &str)
       .json(&HTTPCompletion {
         model: "ahqai",
         messages: &self.msg,
-        stream: false
+        stream: false,
       })
       .send()
       .await?
@@ -44,13 +52,10 @@ impl LlamaChatHandler {
     let mut count = 0;
 
     for choice in response.choices {
-      match choice.finish_reason.as_ref() {
-        "stop" => {
-          count += 1usize;
-          // Directly append response
-          self.msg.push(choice.message);
-        }
-        _ => {}
+      if choice.finish_reason.as_ref() == "stop" {
+        count += 1usize;
+        // Directly append response
+        self.msg.push(choice.message);
       }
     }
 
@@ -58,6 +63,6 @@ impl LlamaChatHandler {
       return Ok(&EMPTY);
     }
 
-    Ok(&self.msg[indexone..(indexone + 1)])
+    Ok(self.msg.get(indexone..(indexone+count)).unwrap_or(&EMPTY))
   }
 }
