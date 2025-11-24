@@ -1,0 +1,10 @@
+[package]
+name = "sherpac"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+pastey = "0.2.0"
+
+[dev-dependencies]
+cpal = "0.16.0"
